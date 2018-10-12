@@ -3,10 +3,12 @@
 package miner
 
 import (
-	"cpsc416-p1"
+	"cpsc416-p1/rfslib"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"os"
 )
 
 var TCP_NETWORK = "tcp"
@@ -15,6 +17,12 @@ type Node interface {
 }
 
 type Miner struct {
+	Config MinerConfig
+	BlockChain map[string] Block           // Placeholder for the block chain
+	PeerChan map[string] chan *Message
+}
+
+type MinerConfig struct {
 	Peers []string                          // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
 	TcpIpPort string                        // The TCP IP:port where this miner can receive connections from rfs clients.
 	Id string                               // The ID of this miner
@@ -26,15 +34,13 @@ type Miner struct {
 	NopDifficulty uint32                    // The no-op block difficulty (proof of work setting: number of zeroes)
 	NumConfFc uint32                        // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
 	NumConfApp uint32                       // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
-	BlockChain map[string] string           // Placeholder for the block chain
-	PeerChan map[string] chan *Message
 }
 
 
 type Block struct {
 	PrevHash string
 	Records []rfslib.Record
-	nonce uint32
+	nonce string                            // A 32 bit string as the nonce
 }
 
 type Message struct {
@@ -46,7 +52,7 @@ type Message struct {
 //TODO: The client and other peers may be using the same TCP connection to connect, need a way to differentiate.
 //TODO: For now we assume we only have peers connect via this connection.
 func (m *Miner) Accept() error {
-	localTcpAddr, err := net.ResolveTCPAddr(TCP_NETWORK, m.TcpIpPort)
+	localTcpAddr, err := net.ResolveTCPAddr(TCP_NETWORK, m.Config.TcpIpPort)
 	if err != nil {
 		fmt.Println("Listener creation failed, please try again.")
 		return err
@@ -65,12 +71,12 @@ func (m *Miner) Accept() error {
 }
 
 func(m *Miner) StartPeerConnections() {
-	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_NETWORK, m.TcpIpPort)
+	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_NETWORK, m.Config.TcpIpPort)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
 	}
 
-	for _, ipPort := range m.Peers {
+	for _, ipPort := range m.Config.Peers {
 		tcpOutAddr, err := net.ResolveTCPAddr(TCP_NETWORK, ipPort)
 		if err != nil {
 			fmt.Println("Unable to resolve peer IpPort:", ipPort)
@@ -139,6 +145,37 @@ func (m *Miner) HandlePeerConnectionIn(conn *net.TCPConn) {
 			m.NotifyPeers(&msg)
 		}
 	}
+}
+
+
+func InitializeMiner(pathToJson string) (*Miner, error){
+	jsonFile, err := os.Open(pathToJson)
+
+	if err != nil {
+		fmt.Println("Miner: Error opening the configuration file, please try again.")
+		return nil, err
+	}
+
+	defer jsonFile.Close()
+
+	bytes, err := ioutil.ReadAll(jsonFile)
+
+	if err != nil {
+		fmt.Println("Miner: Error reading the configuration file, please try again")
+		return nil, err
+	}
+
+	var config MinerConfig
+
+	err = json.Unmarshal(bytes, &config)
+
+	if err != nil {
+		fmt.Println("Miner: Error parsing the configuration file, please try again")
+		return nil, err
+	}
+
+
+	return &Miner{config, make(map[string] Block), make(map[string] chan *Message)}, nil
 }
 
 
