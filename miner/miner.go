@@ -15,10 +15,6 @@ type cryptopuzzle struct {
 	N    int    // PoW difficulty: number of zeroes expected at end of md5
 }
 
-func main() {
-
-}
-
 func calcSecret(problem cryptopuzzle) (nonce string) {
 	result := ""
 
