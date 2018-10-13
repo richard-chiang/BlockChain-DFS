@@ -5,6 +5,7 @@ package miner
 import (
 	"cpsc416-p1/rfslib"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -14,9 +15,14 @@ import (
 var TCP_PROTO = "tcp"
 
 type Miner struct {
-	Config Config
+	Config Config                           // Configuration of the miner
 	PendingOps []Operation                  // A list of pending operations
 	BC *BlockChain                          // Placeholder for the block chain
+	DoNotForward map[string] uint32         // A map that keeps track of the message that shouldn't be forwarded, the string
+	                                        // is the hash of the message, the uint32 is the count of number of times the miner
+	                                        // expects to receive the same message back (this number will be initialized as the number of peers this miner has),
+	                                        // every time it receives the message, this number will be decremented by one,
+	                                        // and when it reaches 0, it can be deleted from the map
 	PeerChan map[string] chan *Message
 }
 
@@ -39,7 +45,8 @@ type Config struct {
 type BlockChain struct {
 	Roots []Node
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[string] *Block
+	BlockChainMap map[string] *Block        // string is the hash of the block
+	Heads []*Block                          // list of heads on the longest chains
 }
 
 type Node struct {
@@ -51,7 +58,7 @@ type Node struct {
 type Block struct {
 	Index uint32                            // Index of the block
 	PrevHash string                         // MD5 hash of the previous block
-	Records []Operation                     // List of operations
+	Operations []Operation                  // List of operations
 	Sig Signature							// The signiture of the miner
 	nonce string                            // A 32 bit string as the nonce
 }
@@ -65,7 +72,7 @@ type Signature struct {
 // The operation interface, CreateFile and AppendRecord are both operations and must implement the Operation interface
 // so we can pass them around as type of Operation
 type Operation interface {
-	isSame(other interface{}) bool           // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
+	isSame(other interface{}) bool          // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
 }
 
 type OpIdentity struct {
@@ -93,6 +100,7 @@ type AppendRecord struct {
 // TODO: to send the entire block chain, we will have to send it over block by block
 type Message struct {
 	Type uint8                              // 0 is the entire block chain, 1 is one block, 2 is an operation, 5 is the end of message used to mark the transmission of the entire blockchain is over
+	                                        // 6 is request to send the entire block chain
 	Content []byte
 }
 
@@ -123,7 +131,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] chan *Message)}, nil
+	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] uint32 ), make(map[string] chan *Message)}, nil
 }
 
 // Create the next block in the block chain
@@ -187,6 +195,10 @@ func (m *Miner) hasConflictingOperations(b *Block) bool {
 
 
 // AddBlockToBlockChain: Adds the block to the block chain after validating the block
+//                       1. Adds the block to the tree structure
+//                       2. Adds the block to BlockChainMap
+//                       3. Remove the parents of the block from Heads list in the BlockChain object
+//                       4. Add this block to the Heads list
 func (m *Miner) AddBlockToBlockChain(b *Block) {
 
 }
@@ -307,6 +319,23 @@ func (m *Miner) HandlePeerConnectionIn(conn *net.TCPConn) {
 			m.NotifyPeers(&msg)
 		}
 	}
+}
+
+
+// SendBlockChain: Sends the blockchain block by block via the TCP connection
+// conn: the TCP connection to send the block chain to
+// return: error if there are problems sending any of the blocks via the TCP connection
+//         nil if the entire block chain is successfully transmitted
+func (m *Miner) SendBlockChain(conn *net.TCPConn) error {
+
+	return errors.New("")
+}
+
+
+// CreateBlockChain: Creates the entire block chain object after receiving all the blocks from it's peer
+// blocks: is the map of blocks with key being the hash of the block and value being a pointer to the block
+func (m *Miner) CreateBlockChain(blocks map[string] *Block) {
+
 }
 
 
