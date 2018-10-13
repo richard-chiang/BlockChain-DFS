@@ -54,11 +54,19 @@ type Node struct {
 	Children []Node
 }
 
+type Block interface {
+	Type() string
+}
+
 // Represents one block in the block chain
-type Block struct {
-	Index uint32                            // Index of the block
-	PrevHash string                         // MD5 hash of the previous block
+type OpBlock struct {
+	BlockInfo NoOpBlock
 	Operations []Operation                  // List of operations
+}
+
+type NoOpBlock struct {
+	Index uint32                            // Index of the block
+	PrevHash string                         // MD5 hash of the previous bloc
 	Sig Signature							// The signiture of the miner
 	nonce string                            // A 32 bit string as the nonce
 }
@@ -134,17 +142,24 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] uint32 ), make(map[string] chan *Message)}, nil
 }
 
-// Create the next block in the block chain
+// createOpBlock: Create the next Op block in the block chain
 // prevBlock: is the previous block of the current block that the miner is trying to create
 // c: is the channel of message where if a block is received and is the same level as the block the miner is currently
 //    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
 //    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
-// TODO: might need to include a chanel for interupt
-func (m *Miner) createBlock(prevBlock *Block, c chan *Message) (Block, error) {
+func (m *Miner) createOpBlock(prevBlock *Block, c chan *Message) (*OpBlock, error) {
 	//STUB
-	return Block{}, nil
+	return &OpBlock{}, nil
 }
 
+// createNoOpBlock: Create the next No op block in the block chain
+// prevBlock: is the previous block of the current block that the miner is trying to create
+// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
+//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
+//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
+func (m* Miner) createNoOpBlock(prevBlock *Block, c chan *Message) (*NoOpBlock, error) {
+	return &NoOpBlock{}, nil
+}
 
 // isBlockValid: Checks if a block is valid base on below criterias
 // 1. Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
@@ -336,6 +351,15 @@ func (m *Miner) SendBlockChain(conn *net.TCPConn) error {
 // blocks: is the map of blocks with key being the hash of the block and value being a pointer to the block
 func (m *Miner) CreateBlockChain(blocks map[string] *Block) {
 
+}
+
+
+func (ob *OpBlock) Type() string {
+	return "OpBlock"
+}
+
+func (nob *NoOpBlock) Type() string {
+	return "NoOpBlock"
 }
 
 
