@@ -1,6 +1,7 @@
 {
   "Peers": ["123.123.123.123:100", "234.234.234.234:200", "345,345,345.345:300"],
-  "TcpIpPort": "127.0.0.1:8080",
+  "LocalTcpIpPort": "127.0.0.1:8081",
+  "ClientTcpIpPort": "127.0.0.1:8080",
   "Id": "123456",
   "NumCoinsOpBlock": 2,
   "NumCoinsNopBlock": 3,

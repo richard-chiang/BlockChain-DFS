@@ -23,8 +23,12 @@ func TestMinerInitialization(t *testing.T) {
 		}
 	}
 
-	if miner.Config.TcpIpPort != "127.0.0.1:8080" {
-		t.Errorf("Field TcpIpPort is not corrected parsed.")
+	if miner.Config.LocalTcpIpPort != "127.0.0.1:8081" {
+		t.Errorf("Field LocalTcpIpPort is not corrected parsed.")
+	}
+
+	if miner.Config.ClientTcpIpPort != "127.0.0.1:8080" {
+		t.Errorf("Field ClientTcpIpPort is not corrected parsed.")
 	}
 
 	if miner.Config.Id != "123456" {

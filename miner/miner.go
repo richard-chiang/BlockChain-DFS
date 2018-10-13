@@ -23,7 +23,8 @@ type Miner struct {
 // Represents the configuration of the miner, the configuration will be loaded from a JSON file
 type Config struct {
 	Peers []string                          // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
-	TcpIpPort string                        // The TCP IP:port where this miner can receive connections from rfs clients.
+	LocalTcpIpPort string                   // The TcpIp:port where this miner can receive connections from other miners.
+	ClientTcpIpPort string                  // The TcpIp:port where this miner can receive connections from rfs clients.
 	Id string                               // The ID of this miner
 	NumCoinsOpBlock uint32                  // The number of record coins mined for an op block
 	NumCoinsNopBlock uint32                 // The number of record coins mined for a no-op block
@@ -36,13 +37,14 @@ type Config struct {
 }
 
 type BlockChain struct {
-	Roots []*Node
+	Roots []Node
+	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
 	BlockChainMap map[string] *Block
 }
 
 type Node struct {
-	data *Block
-	Children []*Node
+	data Block
+	Children []Node
 }
 
 // Represents one block in the block chain
@@ -60,29 +62,37 @@ type Signature struct {
 	Coins uint32                            // Number of coins that's awarded
 }
 
-
-// Identity of the operation
+// The operation interface, CreateFile and AppendRecord are both operations and must implement the Operation interface
+// so we can pass them around as type of Operation
 type Operation interface {
 	isSame(other interface{}) bool           // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
 }
 
 type OpIdentity struct {
-	Id string                               // Id of the client that submitted the operation
+	ClientId string                         // Id of the client that submitted the operation
+	MinerId string                          // Id of the miner who submitted the operation on be half of the client
 	Type uint8                              // 3 is create file, 4 is append record
 }
 
+// Two CreateFile operations are the same if the file names are the same
 type CreateFile struct {
 	OpId Operation
 	FileName string                         // Name of the file that we are creating
+	Cost uint32                             // Cost of creating the file
 }
 
+// Two AppendRecord operations are the same if the ClientId are the same and the Rec are the same
 type AppendRecord struct {
 	OpId Operation
 	Rec rfslib.Record                       // 512 byte record
+	Cost uint32                             // Cost of appending the record (always 1 coin)
 }
 
+// Container used to send data over the network, Content is the serialized Operations, Block or BlockChain to be sent
+// across the network
+// TODO: to send the entire block chain, we will have to send it over block by block
 type Message struct {
-	Type uint8                              // 0 is the entire block chain, 1 is one block, 2 is an operation.
+	Type uint8                              // 0 is the entire block chain, 1 is one block, 2 is an operation, 5 is the end of message used to mark the transmission of the entire blockchain is over
 	Content []byte
 }
 
@@ -144,9 +154,48 @@ func (m *Miner) isBlockValid(b *Block) bool {
 	return false
 }
 
-// Helper function to generate a number between the min and max value, used to determine the number of records to obtain
-// from the PendingOps
-func getBlockSize(min int8, max int8) int8{
+
+// getCoinsRequirementInBlock: creates a map of key value pair with key being the miner Id, and value being the total
+//                             number of coins required for the miner to complete all the operations in the block
+// b: the block which we are trying to calculate the coin requirements for each miner.
+func getCoinsRequirementInBlock(b *Block) map[string] uint32 {
+
+
+	return make(map[string] uint32)
+}
+
+
+// hasEnoughCoins: Determines if a miner has enough coins
+// minerId: the Id of the miner where we are trying to determine whether has sufficient coins
+// coins: the minimum number of coins the miner should have
+// returns: true if minerId has enough coins to carry out the operations in the block
+func (m *Miner) hasEnoughCoins(minerId string, coins uint32) bool {
+
+	//STUB
+	return false
+}
+
+
+// hasConflictingOperations: Check if there are conflicting operations along a particular chain
+// b: the block we are trying to incorporate into the block chain. We will follow the PrevHash until we hit the genesis block
+// returns: true if there are conflicting operations in block b along the block chain.
+func (m *Miner) hasConflictingOperations(b *Block) bool {
+
+	//STUB
+	return false
+}
+
+
+// AddBlockToBlockChain: Adds the block to the block chain after validating the block
+func (m *Miner) AddBlockToBlockChain(b *Block) {
+
+}
+
+// getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
+// records to obtain from PendingOps
+// min: is the minimum block size
+// max: is the maximum block size
+func getNextBlockSize(min int8, max int8) int8{
 	//STUB
 	return 0
 }
@@ -164,7 +213,7 @@ func getStringFromBlock(b *Block) string {
 //TODO: For now we assume we only have peers connect via this connection.
 // AcceptPeerConnections: Accepts peer connections on the IpPort specified in the JSON configuration file
 func (m *Miner) AcceptPeerConnections() error {
-	localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.TcpIpPort)
+	localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.LocalTcpIpPort)
 	if err != nil {
 		fmt.Println("Listener creation failed, please try again.")
 		return err
@@ -184,7 +233,7 @@ func (m *Miner) AcceptPeerConnections() error {
 
 // StartPeerConnections: starts connections to peers specified in the JSON configuration file
 func(m *Miner) StartPeerConnections() {
-	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.TcpIpPort)
+	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.LocalTcpIpPort)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
 	}
