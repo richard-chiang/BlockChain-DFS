@@ -16,10 +16,7 @@ type cryptopuzzle struct {
 }
 
 func main() {
-	hash := "45298d0cb11dfb05c9dc9ec6c581c5ec"
-	problem := cryptopuzzle{hash, 5}
-	nonce := calcSecret(problem)
-	fmt.Println(nonce)
+
 }
 
 func calcSecret(problem cryptopuzzle) (nonce string) {
