@@ -17,6 +17,7 @@ import (
 )
 
 var TCP_PROTO = "tcp"
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 type Miner struct {
 	Config Config                           // Configuration of the miner
