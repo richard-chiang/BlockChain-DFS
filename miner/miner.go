@@ -4,16 +4,17 @@ package miner
 
 import (
 	"cpsc416-p1/rfslib"
-  "crypto/md5"
-  "encoding/hex"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-  "math/rand"
+	"math/rand"
 	"net"
 	"os"
-  "strings"
+	"strings"
+	"sync"
 )
 
 var TCP_PROTO = "tcp"
@@ -28,7 +29,11 @@ type Miner struct {
 	                                        // expects to receive the same message back (this number will be initialized as the number of peers this miner has),
 	                                        // every time it receives the message, this number will be decremented by one,
 	                                        // and when it reaches 0, it can be deleted from the map
-	PeerChan map[string] chan *Message
+	PeerChanOut map[string] chan *Message   // Map of peer ipport to channels that contains messages to be forwarded to the peers
+	PeerChanOutSig map[string] chan int     // Map of peer ipport to channels to send kill signals to incoming connection handler processes
+	PeerChanInSig map[string] chan int      // Map of peer ipport to channels to send kill signals to outgoing connection handler processes
+	PeerChanIn chan *Message                // A chanel to receive message from peers, different handler will be called depending on different messages
+	lock *sync.Mutex                        // The mutex to synchronize the data structure access of processes
 }
 
 // Represents the configuration of the miner, the configuration will be loaded from a JSON file
@@ -146,7 +151,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] uint32 ), make(map[string] chan *Message)}, nil
+	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] uint32 ), make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
 
 // createOpBlock: Create the next Op block in the block chain
@@ -243,26 +248,42 @@ func getStringFromBlock(b *Block) string {
 	return ""
 }
 
-//TODO: The client and other peers may be using the same TCP connection to connect, need a way to differentiate.
-//TODO: For now we assume we only have peers connect via this connection.
-// AcceptPeerConnections: Accepts peer connections on the IpPort specified in the JSON configuration file
-func (m *Miner) AcceptPeerConnections() error {
-	localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.IncomingMinersAddr)
-	if err != nil {
-		fmt.Println("Listener creation failed, please try again.")
-		return err
+
+// AcceptPeerConnections: Accepts peer connections on the IncomingMinersAddr specified in the JSON configuration file
+func (m *Miner) AcceptPeerConnections() {
+	for {
+		localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.IncomingMinersAddr)
+		if err != nil {
+			fmt.Println("Listener creation failed, please try again.")
+			return
+		}
+
+		listener, err := net.ListenTCP(TCP_PROTO, localTcpAddr)
+
+		tcpConn, err := listener.AcceptTCP()
+		if err != nil {
+			fmt.Println("TCP connection failed.")
+			return
+		}
+
+		peerIpPort:= tcpConn.RemoteAddr().String()
+
+		m.lock.Lock()
+
+		msgChan := make(chan *Message)
+		m.PeerChanOut[peerIpPort] = msgChan
+
+		killSigIn := make(chan int)
+		m.PeerChanInSig[peerIpPort] = killSigIn
+
+		killSigOut := make(chan int)
+		m.PeerChanOutSig[peerIpPort] = killSigOut
+
+		m.lock.Unlock()
+
+		go m.HandlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
+		go m.HandlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
 	}
-	listener, err := net.ListenTCP(TCP_PROTO, localTcpAddr)
-
-	conn, err := listener.AcceptTCP()
-	if err != nil {
-		fmt.Println("TCP connection failed.")
-		return err
-	}
-
-	go m.HandlePeerConnectionIn(conn)
-
-	return nil
 }
 
 // StartPeerConnections: starts connections to peers specified in the JSON configuration file
@@ -272,51 +293,101 @@ func(m *Miner) StartPeerConnections() {
 		panic("Unable to resolve local TCP address")
 	}
 
-	for _, ipPort := range m.Config.PeerMinersAddrs {
-		tcpOutAddr, err := net.ResolveTCPAddr(TCP_PROTO, ipPort)
+	for _, peerIpPort := range m.Config.PeerMinersAddrs {
+		tcpPeerAddr, err := net.ResolveTCPAddr(TCP_PROTO, peerIpPort)
 		if err != nil {
-			fmt.Println("Unable to resolve peer IpPort:", ipPort)
+			fmt.Println("Unable to resolve peer IpPort:", peerIpPort)
 			continue
 		}
 
-		tcpConn, err := net.DialTCP(TCP_PROTO,tcpOutAddr, tcpLocalAddr)
+		tcpConn, err := net.DialTCP(TCP_PROTO, tcpLocalAddr, tcpPeerAddr)
 
 		if err != nil {
-			fmt.Println("Failed to establish connection with peer:", ipPort)
+			fmt.Println("Failed to establish connection with peer:", peerIpPort)
 			continue
 		}
 
-		c := make(chan *Message)
-		m.PeerChan[ipPort] = c
+		m.lock.Lock()
 
-		go HandlePeerConnectionOut(tcpConn, c)
+		msgChan := make(chan *Message)
+		m.PeerChanOut[peerIpPort] = msgChan
+
+		killSigIn := make(chan int)
+		m.PeerChanInSig[peerIpPort] = killSigIn
+
+		killSigOut := make(chan int)
+		m.PeerChanOutSig[peerIpPort] = killSigOut
+
+		m.lock.Unlock()
+
+		go m.HandlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
+		go m.HandlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
 	}
 }
 
+// NotifyPeers: sends the message to all peers outgoing channels so the out handler will forward the message to the
+//              corresponding peers
+// msg: the message to be sent
 func(m *Miner) NotifyPeers(msg *Message) {
-	for _, v := range m.PeerChan {
+	for _, v := range m.PeerChanOut {
 		v <- msg
 	}
 }
 
-// TODO: Example code, need changes in the future.
-func HandlePeerConnectionOut(conn *net.TCPConn, c chan *Message) {
-	defer conn.Close()
-
+// HandlePeerConnectionOut: waiting to receive message from the channel and forward the messages to peers
+//                          when the connection with the peer is closed, this process will be killed.
+//                          this process will handle the connection closure so HandlePeerConnectionIn doesn't have to
+//                          worry about it.
+// conn: the TCP connection with one peer
+// c: the channel of message that this process waits to receive message from
+// sig: the channel this process receives the kill signal
+func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, msgChan chan *Message, sig chan int) {
 	for {
 		select {
-			case msg := <- c:
+		case <-sig:
+			fmt.Printf("Kill signal for HandlePeerConnectionOut received for %s, stopping thread.\n", peerIpPort)
+			break
+		case msg := <- msgChan:
+			forward := true
+			// Check if we should forward the message
+			hash := getMd5Hash(string(msg.Type) + string(msg.Content))
+			m.lock.Lock()
+			if _, ok := m.DoNotForward[hash]; ok {
+				m.DoNotForward[hash]--
+				forward = false
+			}
+			m.lock.Unlock()
+
+			if forward {
 				b, e := json.Marshal(*msg)
 				if e != nil {
 					fmt.Println("Message encoding failed")
 					continue
 				}
 				conn.Write(b)
+			}
+		default:
+			// stop for one second
+			// time.Sleep(1 * time.Second)
 		}
 	}
+
+	fmt.Printf("Thread successfully stopped for %s, performing clean up.\n", peerIpPort)
+	conn.Close()
+	close(msgChan)
+	close(sig)
+
+	m.lock.Lock()
+	delete(m.PeerChanOutSig, peerIpPort)
+	delete(m.PeerChanOut, peerIpPort)
+	m.lock.Unlock()
 }
 
-func (m *Miner) HandlePeerConnectionIn(conn *net.TCPConn) {
+// HandlePeerConnectionIn: waiting to receive message from the tcp connection, write this message to the out going channel
+//                         of all peers and handle the message depending on message types
+// conn: the TCP connection with one peer
+// sig: the channel this process receives the kill signal
+func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig chan int) {
 
 	for {
 		// TODO: We need to design the message structure first before we can finalize the size, now just hard coding
@@ -336,10 +407,8 @@ func (m *Miner) HandlePeerConnectionIn(conn *net.TCPConn) {
 		var msg Message
 
 		json.Unmarshal(buf[:n], msg)
+		m.NotifyPeers(&msg)
 
-		if msg.Type == 0 {
-			m.NotifyPeers(&msg)
-		}
 	}
 }
 
@@ -369,6 +438,13 @@ func (nob *NoOpBlock) Type() string {
 	return "NoOpBlock"
 }
 
+func getMd5Hash(str string) string {
+	h := md5.New()
+	h.Write([]byte(str))
+	res := hex.EncodeToString(h.Sum(nil))
+	return res
+}
+
 type cryptopuzzle struct {
 	Hash string // block hash without nonce
 	N    int    // PoW difficulty: number of zeroes expected at end of md5
@@ -385,10 +461,7 @@ func calcSecret(problem cryptopuzzle) (nonce string) {
 }
 
 func computeNonceSecretHash(hash string, nonce string) string {
-	h := md5.New()
-	h.Write([]byte(hash + nonce))
-	str := hex.EncodeToString(h.Sum(nil))
-	return str
+	return getMd5Hash(hash + nonce)
 }
 
 func validNonce(N int, Hash string) bool {
