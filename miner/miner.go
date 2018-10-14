@@ -33,18 +33,20 @@ type Miner struct {
 
 // Represents the configuration of the miner, the configuration will be loaded from a JSON file
 type Config struct {
-	Peers []string                          // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
-	LocalTcpIpPort string                   // The TcpIp:port where this miner can receive connections from other miners.
-	ClientTcpIpPort string                  // The TcpIp:port where this miner can receive connections from rfs clients.
-	Id string                               // The ID of this miner
-	NumCoinsOpBlock uint32                  // The number of record coins mined for an op block
-	NumCoinsNopBlock uint32                 // The number of record coins mined for a no-op block
-	NumCoinsPerFile uint32                  // The number of record coins charged for creating a file
-	GenesisHash string                      // The genesis (first) block MD5 hash for this blockchain
-	OpDifficulty uint32                     // The op block difficulty (proof of work setting: number of zeroes)
-	NopDifficulty uint32                    // The no-op block difficulty (proof of work setting: number of zeroes)
-	NumConfFc uint32                        // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
-	NumConfApp uint32                       // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
+	PeerMinersAddrs []string                // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
+	IncomingMinersAddr string               // The TcpIp:port where this miner can receive connections from other miners.
+	OutgoingMinersIP string                 // The local IP that the miner should use to connect to peer miners
+	IncomingClientsAddr string              // The TcpIp:port where this miner can receive connections from rfs clients.
+	MinerID string                          // The ID of this miner
+	MinedCoinsPerOpBlock uint32             // The number of record coins mined for an op block
+	MinedCoinsPerNoOpBlock uint32           // The number of record coins mined for a no-op block
+	NumCoinsPerFileCreate uint32            // The number of record coins charged for creating a file
+	GenesisBlockHash string                 // The genesis (first) block MD5 hash for this blockchain
+	PowPerOpBlock uint32                    // The op block difficulty (proof of work setting: number of zeroes)
+	PowPerNoOpBlock uint32                  // The no-op block difficulty (proof of work setting: number of zeroes)
+	ConfirmsPerFileCreate uint32            // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
+	ConfirmsPerFileAppend uint32            // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
+	GenOpBlockTimeout uint32                // Time in milliseconds, the minimum time between op block mining
 }
 
 type BlockChain struct {
@@ -245,7 +247,7 @@ func getStringFromBlock(b *Block) string {
 //TODO: For now we assume we only have peers connect via this connection.
 // AcceptPeerConnections: Accepts peer connections on the IpPort specified in the JSON configuration file
 func (m *Miner) AcceptPeerConnections() error {
-	localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.LocalTcpIpPort)
+	localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.IncomingMinersAddr)
 	if err != nil {
 		fmt.Println("Listener creation failed, please try again.")
 		return err
@@ -265,12 +267,12 @@ func (m *Miner) AcceptPeerConnections() error {
 
 // StartPeerConnections: starts connections to peers specified in the JSON configuration file
 func(m *Miner) StartPeerConnections() {
-	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.LocalTcpIpPort)
+	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.OutgoingMinersIP)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
 	}
 
-	for _, ipPort := range m.Config.Peers {
+	for _, ipPort := range m.Config.PeerMinersAddrs {
 		tcpOutAddr, err := net.ResolveTCPAddr(TCP_PROTO, ipPort)
 		if err != nil {
 			fmt.Println("Unable to resolve peer IpPort:", ipPort)

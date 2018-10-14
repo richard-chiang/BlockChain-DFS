@@ -1,14 +1,16 @@
 {
-  "Peers": ["123.123.123.123:100", "234.234.234.234:200", "345,345,345.345:300"],
-  "LocalTcpIpPort": "127.0.0.1:8081",
-  "ClientTcpIpPort": "127.0.0.1:8080",
-  "Id": "123456",
-  "NumCoinsOpBlock": 2,
-  "NumCoinsNopBlock": 3,
-  "NumCoinsPerFile": 1,
-  "GenesisHash": "qwerwerqwfsdfsadfsdf",
-  "OpDifficulty": 6,
-  "NopDifficulty": 5,
-  "NumConfFc": 5,
-  "NumConfApp": 6
+  "PeerMinersAddrs": ["123.123.123.123:100", "234.234.234.234:200", "345,345,345.345:300"],
+  "IncomingMinersAddr": "127.0.0.1:8081",
+  "OutgoingMinersIP": "127.0.0.1:8082",
+  "IncomingClientsAddr": "127.0.0.1:8080",
+  "MinerID": "123456",
+  "MinedCoinsPerOpBlock": 2,
+  "MinedCoinsPerNoOpBlock": 3,
+  "NumCoinsPerFileCreate": 1,
+  "GenesisBlockHash": "qwerwerqwfsdfsadfsdf",
+  "PowPerOpBlock": 6,
+  "PowPerNoOpBlock": 5,
+  "ConfirmsPerFileCreate": 5,
+  "ConfirmsPerFileAppend": 6,
+  "GenOpBlockTimeout": 5
 }
