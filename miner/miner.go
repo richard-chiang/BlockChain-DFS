@@ -5,6 +5,7 @@ package miner
 import (
 	"cpsc416-p1/rfslib"
 	"crypto/md5"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 
 var TCP_PROTO = "tcp"
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const MSG_SIZE = 4                          // 4 bytes in size
 
 type Miner struct {
 	Config Config                           // Configuration of the miner
@@ -103,14 +105,14 @@ type OpIdentity struct {
 
 // Two CreateFile operations are the same if the file names are the same
 type CreateFile struct {
-	OpId Operation
+	OpId OpIdentity
 	FileName string                         // Name of the file that we are creating
 	Cost uint32                             // Cost of creating the file
 }
 
 // Two AppendRecord operations are the same if the ClientId are the same and the Rec are the same
 type AppendRecord struct {
-	OpId Operation
+	OpId OpIdentity
 	Rec rfslib.Record                       // 512 byte record
 	Cost uint32                             // Cost of appending the record (always 1 coin)
 }
@@ -134,7 +136,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 
 	defer jsonFile.Close()
 
-	bytes, err := ioutil.ReadAll(jsonFile)
+	configData, err := ioutil.ReadAll(jsonFile)
 
 	if err != nil {
 		fmt.Println("Miner: Error reading the configuration file, please try again")
@@ -143,7 +145,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 
 	var config Config
 
-	err = json.Unmarshal(bytes, &config)
+	err = json.Unmarshal(configData, &config)
 
 	if err != nil {
 		fmt.Println("Miner: Error parsing the configuration file, please try again")
@@ -353,18 +355,14 @@ func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 			hash := getMd5Hash(string(msg.Type) + string(msg.Content))
 			m.lock.Lock()
 			if _, ok := m.DoNotForward[hash]; ok {
+				//TODO: think about this, after one hop, the peer might expect 1 less flood of the same message
 				m.DoNotForward[hash]--
 				forward = false
 			}
 			m.lock.Unlock()
 
 			if forward {
-				b, e := json.Marshal(*msg)
-				if e != nil {
-					fmt.Println("Message encoding failed")
-					continue
-				}
-				conn.Write(b)
+				SendMsgToTcp(conn, msg)
 			}
 		default:
 			// stop for one second
@@ -391,24 +389,20 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 
 	for {
 		// TODO: We need to design the message structure first before we can finalize the size, now just hard coding
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
+		msg, err := ReadMsgFromTcp(conn)
 
 		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				fmt.Println("read timeout:", err)
-				// time out
-			} else {
-				fmt.Println("read error:", err)
-				// some error else, do something else, for example create new conn
-			}
+			fmt.Println("Message read failed.")
+			continue
 		}
 
-		var msg Message
+		m.NotifyPeers(msg)
 
-		json.Unmarshal(buf[:n], msg)
-		m.NotifyPeers(&msg)
-
+		switch msg.Type {
+		case 2:
+			//var op
+			//op := json.Unmarshal(msg.Content)
+		}
 	}
 }
 
@@ -443,6 +437,56 @@ func getMd5Hash(str string) string {
 	h.Write([]byte(str))
 	res := hex.EncodeToString(h.Sum(nil))
 	return res
+}
+
+func ReadMsgFromTcp(conn *net.TCPConn) (*Message, error){
+	var msg Message
+	sizeBuf := make([]byte, MSG_SIZE)
+	_, err := conn.Read(sizeBuf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	mlen := binary.LittleEndian.Uint32(sizeBuf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	msgBuff := make([]byte, mlen)
+
+	sizeMsg, err := conn.Read(msgBuff)
+
+	if uint32(sizeMsg) != mlen {
+		return nil, errors.New("msg size wrong")
+	}
+
+	err = json.Unmarshal(msgBuff, &msg)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &msg, nil
+}
+
+func SendMsgToTcp(conn *net.TCPConn, msg *Message) error {
+
+	msgBytes, err := json.Marshal(*msg)
+
+	if err != nil {
+		return err
+	}
+
+	b := make([]byte, MSG_SIZE)
+	binary.LittleEndian.PutUint32(b, uint32(len(msgBytes)))
+
+	conn.Write(b)
+
+	conn.Write(msgBytes)
+
+	return nil
 }
 
 type cryptopuzzle struct {
