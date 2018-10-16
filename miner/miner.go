@@ -3,18 +3,13 @@
 package miner
 
 import (
-	"cpsc416-p1/rfslib"
-	"crypto/md5"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -56,73 +51,11 @@ type Config struct {
 	GenOpBlockTimeout uint32                // Time in milliseconds, the minimum time between op block mining
 }
 
-type BlockChain struct {
-	Roots []Node
-	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[string] *Block        // string is the hash of the block
-	Heads []*Block                          // list of heads on the longest chains
-}
-
-type Node struct {
-	data Block
-	Children []Node
-}
-
-type Block interface {
-	Type() string
-}
-
-// Represents one block in the block chain
-type OpBlock struct {
-	BlockInfo NoOpBlock
-	Operations []Operation                  // List of operations
-}
-
-type NoOpBlock struct {
-	Index uint32                            // Index of the block
-	PrevHash string                         // MD5 hash of the previous bloc
-	Sig Signature							// The signiture of the miner
-	nonce string                            // A 32 bit string as the nonce
-}
-
-// Represents the signature of the block
-type Signature struct {
-	Id string                               // The miner Id that this credit goes to
-	Coins uint32                            // Number of coins that's awarded
-}
-
-// The operation interface, CreateFile and AppendRecord are both operations and must implement the Operation interface
-// so we can pass them around as type of Operation
-type Operation interface {
-	isSame(other interface{}) bool          // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
-}
-
-type OpIdentity struct {
-	ClientId string                         // Id of the client that submitted the operation
-	MinerId string                          // Id of the miner who submitted the operation on be half of the client
-	Type uint8                              // 3 is create file, 4 is append record
-}
-
-// Two CreateFile operations are the same if the file names are the same
-type CreateFile struct {
-	OpId OpIdentity
-	FileName string                         // Name of the file that we are creating
-	Cost uint32                             // Cost of creating the file
-}
-
-// Two AppendRecord operations are the same if the ClientId are the same and the Rec are the same
-type AppendRecord struct {
-	OpId OpIdentity
-	Rec rfslib.Record                       // 512 byte record
-	Cost uint32                             // Cost of appending the record (always 1 coin)
-}
-
 // Container used to send data over the network, Content is the serialized Operations, Block or BlockChain to be sent
 // across the network
-// TODO: to send the entire block chain, we will have to send it over block by block
 type Message struct {
-	Type uint8                              // 0 is the entire block chain, 1 is one block, 2 is an operation, 5 is the end of message used to mark the transmission of the entire blockchain is over
-	                                        // 6 is request to send the entire block chain
+	Type uint8                              // 0 is the entire block chain, 1 is op block, 2 is NoOpBlock, 3 is CreateFile operation,
+											// 4 is AppendRecord operation, 5 is request to send the entire block chain
 	Content []byte
 }
 
@@ -153,103 +86,9 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]Operation,0), new(BlockChain), make(map[string] uint32 ), make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
+	return &Miner{config, make([]Operation,0), &BlockChain{make(map[uint32] Block), make([]uint32, 0), false}, make(map[string] uint32 ),
+	make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
-
-// createOpBlock: Create the next Op block in the block chain
-// prevBlock: is the previous block of the current block that the miner is trying to create
-// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
-//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
-//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
-func (m *Miner) createOpBlock(prevBlock *Block, c chan *Message) (*OpBlock, error) {
-	//STUB
-	return &OpBlock{}, nil
-}
-
-// createNoOpBlock: Create the next No op block in the block chain
-// prevBlock: is the previous block of the current block that the miner is trying to create
-// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
-//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
-//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
-func (m* Miner) createNoOpBlock(prevBlock *Block, c chan *Message) (*NoOpBlock, error) {
-	return &NoOpBlock{}, nil
-}
-
-// isBlockValid: Checks if a block is valid base on below criterias
-// 1. Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
-// 2. Check that the previous block hash points to a legal, previously generated, block.
-// 3. Check that each operation in the block is associated with a miner ID that has enough record
-//	  coins to pay for the operation (i.e., the number of record coins associated with the minerID
-//	  must have sufficient balance to 'pay' for the operation).
-// 4. Check that each operation does not violate RFS semantics (e.g., a record is not mutated or
-//    inserted into the middled of an rfs file).
-// 5. We need to check there is no conflicting operations along the chain in the block. i.e. there are no two create
-//    operations with the same file name.
-func (m *Miner) isBlockValid(b *Block) bool {
-
-	//STUB
-	return false
-}
-
-
-// getCoinsRequirementInBlock: creates a map of key value pair with key being the miner Id, and value being the total
-//                             number of coins required for the miner to complete all the operations in the block
-// b: the block which we are trying to calculate the coin requirements for each miner.
-func getCoinsRequirementInBlock(b *Block) map[string] uint32 {
-
-
-	return make(map[string] uint32)
-}
-
-
-// hasEnoughCoins: Determines if a miner has enough coins
-// minerId: the Id of the miner where we are trying to determine whether has sufficient coins
-// coins: the minimum number of coins the miner should have
-// returns: true if minerId has enough coins to carry out the operations in the block
-func (m *Miner) hasEnoughCoins(minerId string, coins uint32) bool {
-
-	//STUB
-	return false
-}
-
-
-// hasConflictingOperations: Check if there are conflicting operations along a particular chain
-// b: the block we are trying to incorporate into the block chain. We will follow the PrevHash until we hit the genesis block
-// returns: true if there are conflicting operations in block b along the block chain.
-func (m *Miner) hasConflictingOperations(b *Block) bool {
-
-	//STUB
-	return false
-}
-
-
-// AddBlockToBlockChain: Adds the block to the block chain after validating the block
-//                       1. Adds the block to the tree structure
-//                       2. Adds the block to BlockChainMap
-//                       3. Remove the parents of the block from Heads list in the BlockChain object
-//                       4. Add this block to the Heads list
-func (m *Miner) AddBlockToBlockChain(b *Block) {
-
-}
-
-// getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
-// records to obtain from PendingOps
-// min: is the minimum block size
-// max: is the maximum block size
-func getNextBlockSize(min int8, max int8) int8{
-	//STUB
-	return 0
-}
-
-
-// Helper function to get the string representation of the block which will be used to find the nonce of the block
-// b: is the pointer to the block that we need to create the string representation of.
-func getStringFromBlock(b *Block) string {
-
-	//STUB
-	return ""
-}
-
 
 // AcceptPeerConnections: Accepts peer connections on the IncomingMinersAddr specified in the JSON configuration file
 func (m *Miner) AcceptPeerConnections() {
@@ -324,6 +163,11 @@ func(m *Miner) StartPeerConnections() {
 
 		go m.HandlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
 		go m.HandlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
+
+		reqForBlockChain := Message{5, make([]byte,0)}
+
+		// Send message to peers to request for the entire block chain
+		msgChan <- &reqForBlockChain
 	}
 }
 
@@ -388,7 +232,6 @@ func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig chan int) {
 
 	for {
-		// TODO: We need to design the message structure first before we can finalize the size, now just hard coding
 		msg, err := ReadMsgFromTcp(conn)
 
 		if err != nil {
@@ -396,47 +239,100 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			continue
 		}
 
-		m.NotifyPeers(msg)
-
 		switch msg.Type {
+		// TODO: wait for a while, if no block chain received, need to start mining no op blocks on its own
+		case 0:
+			if !m.BC.initialized {
+				var bc BlockChain
+				err := json.Unmarshal(msg.Content, &bc)
+				if err != nil {
+					fmt.Println("Decoding block chain failed")
+					continue
+				}
+
+				m.BC = &bc
+			}
+
+		case 1:
+			var ob OpBlock
+			err := json.Unmarshal(msg.Content, &ob)
+			if err != nil {
+				fmt.Println("Decoding op block failed")
+				continue
+			}
+
+			// If not exist in the DoNotForward map, then forward to peers
+			if _, ok := m.DoNotForward[getMd5Hash(ob.getStringFromBlock())]; !ok {
+				m.NotifyPeers(msg)
+			}
+
+			// TODO: then incorporate the block into the block chain
+
 		case 2:
-			//var op
-			//op := json.Unmarshal(msg.Content)
+			var nob NoOpBlock
+			err := json.Unmarshal(msg.Content, &nob)
+			if err != nil {
+				fmt.Println("Decoding no op block failed")
+				continue
+			}
+
+			// If not exist in the DoNotForward map, then forward to peers
+			if _, ok := m.DoNotForward[getMd5Hash(nob.getStringFromBlock())]; !ok {
+				m.NotifyPeers(msg)
+			}
+
+			// TODO: then incorporate the block into the block chain
+
+		case 3:
+			var cf CreateFile
+			err := json.Unmarshal(msg.Content, &cf)
+			if err != nil {
+				fmt.Println("Decoding no create file operation failed")
+				continue
+			}
+
+			// If not exist in the DoNotForward map, then forward to peers
+			if _, ok := m.DoNotForward[getMd5Hash(cf.getStringFromOp())]; !ok {
+				m.NotifyPeers(msg)
+			}
+
+			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
+
+		case 4:
+			var ar AppendRecord
+			err := json.Unmarshal(msg.Content, &ar)
+			if err != nil {
+				fmt.Println("Decoding no create file operation failed")
+				continue
+			}
+
+			// If not exist in the DoNotForward map, then forward to peers
+			if _, ok := m.DoNotForward[getMd5Hash(ar.getStringFromOp())]; !ok {
+				m.NotifyPeers(msg)
+			}
+
+			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
+
+		case 5:
+			bcBytes, err := json.Marshal(*m.BC)
+
+			if err != nil {
+				fmt.Println("Encoding of block chain failed")
+				continue
+			}
+			msg := Message{0, bcBytes}
+			SendMsgToTcp(conn, &msg)
 		}
 	}
 }
 
-
-// SendBlockChain: Sends the blockchain block by block via the TCP connection
+// SendBlockChain: Sends the entire block chain via the TCP connection
 // conn: the TCP connection to send the block chain to
 // return: error if there are problems sending any of the blocks via the TCP connection
 //         nil if the entire block chain is successfully transmitted
 func (m *Miner) SendBlockChain(conn *net.TCPConn) error {
 
 	return errors.New("")
-}
-
-
-// CreateBlockChain: Creates the entire block chain object after receiving all the blocks from it's peer
-// blocks: is the map of blocks with key being the hash of the block and value being a pointer to the block
-func (m *Miner) CreateBlockChain(blocks map[string] *Block) {
-
-}
-
-
-func (ob *OpBlock) Type() string {
-	return "OpBlock"
-}
-
-func (nob *NoOpBlock) Type() string {
-	return "NoOpBlock"
-}
-
-func getMd5Hash(str string) string {
-	h := md5.New()
-	h.Write([]byte(str))
-	res := hex.EncodeToString(h.Sum(nil))
-	return res
 }
 
 func ReadMsgFromTcp(conn *net.TCPConn) (*Message, error){
@@ -489,55 +385,3 @@ func SendMsgToTcp(conn *net.TCPConn, msg *Message) error {
 	return nil
 }
 
-type cryptopuzzle struct {
-	Hash string // block hash without nonce
-	N    int    // PoW difficulty: number of zeroes expected at end of md5
-}
-
-func calcSecret(problem cryptopuzzle) (nonce string) {
-	result := ""
-
-	for !validNonce(problem.N, result) {
-		nonce = randString()
-		result = computeNonceSecretHash(problem.Hash, nonce)
-	}
-	return
-}
-
-func computeNonceSecretHash(hash string, nonce string) string {
-	return getMd5Hash(hash + nonce)
-}
-
-func validNonce(N int, Hash string) bool {
-	zeros := strings.Repeat("0", N)
-	isValid := strings.HasSuffix(Hash, zeros)
-	fmt.Println("valid: " + Hash)
-	return isValid
-}
-
-func randString() string {
-	// tradeoff
-	// the larger the possible max length of string the longer it takes to generate each string
-	// pro: more possible solutions to try
-	// con: much slower in each try
-	n := rand.Intn(1000)
-	output := make([]byte, n)
-	// We will take n bytes, one byte for each character of output.
-	randomness := make([]byte, n)
-	// read all random
-	_, err := rand.Read(randomness)
-	if err != nil {
-		panic(err)
-	}
-	l := len(letterBytes)
-	// fill output
-	for pos := range output {
-		// get random item
-		random := uint8(randomness[pos])
-		// random % 64
-		randomPos := random % uint8(l)
-		// put into output
-		output[pos] = letterBytes[randomPos]
-	}
-	return string(output)
-}

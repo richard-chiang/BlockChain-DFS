@@ -80,7 +80,7 @@ func TestMinerInitialization(t *testing.T) {
 }
 
 func TestP2PMessagePassing(t *testing.T) {
-	id := miner2.OpIdentity{ClientId: "123", MinerId: "345", Type: 3}
+	id := miner2.OpIdentity{ClientId: "123", MinerId: "345"}
 	op := miner2.CreateFile{OpId: id, FileName: "456", Cost: 5}
 
 	b, _ := json.Marshal(op)
@@ -106,10 +106,6 @@ func TestP2PMessagePassing(t *testing.T) {
 
 	if receivedOp.OpId.MinerId != "345" {
 		t.Error("MinerId is not correct")
-	}
-
-	if receivedOp.OpId.Type != 3 {
-		t.Error("Type is not correct")
 	}
 
 	if receivedOp.FileName != "456" {
