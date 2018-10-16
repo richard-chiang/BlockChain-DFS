@@ -92,7 +92,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, PendingOps{}, &BlockChain{make(map[uint32] Block), make([]uint32, 0), false}, make(map[string] uint32 ),
+	return &Miner{config, PendingOps{}, &BlockChain{make(map[uint32] interface{}), make([]uint32, 0), false}, make(map[string] uint32 ),
 	make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
 
