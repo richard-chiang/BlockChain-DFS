@@ -11,15 +11,15 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 )
 
 var TCP_PROTO = "tcp"
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const MSG_SIZE = 4                          // 4 bytes in size
 
 type Miner struct {
 	Config Config                           // Configuration of the miner
-	PendingOps []Operation                  // A list of pending operations
+	Ops PendingOps                  		// Pending Operations
 	BC *BlockChain                          // Placeholder for the block chain
 	DoNotForward map[string] uint32         // A map that keeps track of the message that shouldn't be forwarded, the string
 	                                        // is the hash of the message, the uint32 is the count of number of times the miner
@@ -49,6 +49,12 @@ type Config struct {
 	ConfirmsPerFileCreate uint32            // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
 	ConfirmsPerFileAppend uint32            // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
 	GenOpBlockTimeout uint32                // Time in milliseconds, the minimum time between op block mining
+}
+
+type PendingOps struct {
+	PendingOps []uintptr                    // A list of pointers to pending operations
+	PendingMap map[uint32] interface{}      // Map of md5 hash of the operation to boolean, to the operations, operations could be
+	                                        // CreateFile or AppendRecord
 }
 
 // Container used to send data over the network, Content is the serialized Operations, Block or BlockChain to be sent
@@ -86,12 +92,12 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]Operation,0), &BlockChain{make(map[uint32] Block), make([]uint32, 0), false}, make(map[string] uint32 ),
+	return &Miner{config, PendingOps{}, &BlockChain{make(map[uint32] Block), make([]uint32, 0), false}, make(map[string] uint32 ),
 	make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
 
 // AcceptPeerConnections: Accepts peer connections on the IncomingMinersAddr specified in the JSON configuration file
-func (m *Miner) AcceptPeerConnections() {
+func (m *Miner) acceptPeerConnections() {
 	for {
 		localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.IncomingMinersAddr)
 		if err != nil {
@@ -122,13 +128,13 @@ func (m *Miner) AcceptPeerConnections() {
 
 		m.lock.Unlock()
 
-		go m.HandlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
-		go m.HandlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
+		go m.handlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
+		go m.handlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
 	}
 }
 
 // StartPeerConnections: starts connections to peers specified in the JSON configuration file
-func(m *Miner) StartPeerConnections() {
+func(m *Miner) startPeerConnections() {
 	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.OutgoingMinersIP)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
@@ -161,8 +167,8 @@ func(m *Miner) StartPeerConnections() {
 
 		m.lock.Unlock()
 
-		go m.HandlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
-		go m.HandlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
+		go m.handlePeerConnectionIn(peerIpPort, tcpConn, killSigIn)
+		go m.handlePeerConnectionOut(peerIpPort, tcpConn, msgChan, killSigOut)
 
 		reqForBlockChain := Message{5, make([]byte,0)}
 
@@ -174,7 +180,7 @@ func(m *Miner) StartPeerConnections() {
 // NotifyPeers: sends the message to all peers outgoing channels so the out handler will forward the message to the
 //              corresponding peers
 // msg: the message to be sent
-func(m *Miner) NotifyPeers(msg *Message) {
+func(m *Miner) notifyPeers(msg *Message) {
 	for _, v := range m.PeerChanOut {
 		v <- msg
 	}
@@ -187,7 +193,7 @@ func(m *Miner) NotifyPeers(msg *Message) {
 // conn: the TCP connection with one peer
 // c: the channel of message that this process waits to receive message from
 // sig: the channel this process receives the kill signal
-func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, msgChan chan *Message, sig chan int) {
+func (m *Miner) handlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, msgChan chan *Message, sig chan int) {
 	for {
 		select {
 		case <-sig:
@@ -214,7 +220,7 @@ func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 		}
 	}
 
-	fmt.Printf("Thread successfully stopped for %s, performing clean up.\n", peerIpPort)
+	fmt.Printf("Thread successfully stopped for HandlePeerConnectionOut for %s, performing clean up.\n", peerIpPort)
 	conn.Close()
 	close(msgChan)
 	close(sig)
@@ -229,9 +235,15 @@ func (m *Miner) HandlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 //                         of all peers and handle the message depending on message types
 // conn: the TCP connection with one peer
 // sig: the channel this process receives the kill signal
-func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig chan int) {
+func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig chan int) {
 
 	for {
+		select {
+		case <-sig:
+			fmt.Printf("Kill signal for HandlePeerConnectionIn received for %s, stopping thread.\n", peerIpPort)
+			break
+		}
+
 		msg, err := ReadMsgFromTcp(conn)
 
 		if err != nil {
@@ -263,7 +275,7 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[getMd5Hash(ob.getStringFromBlock())]; !ok {
-				m.NotifyPeers(msg)
+				m.notifyPeers(msg)
 			}
 
 			// TODO: then incorporate the block into the block chain
@@ -278,7 +290,7 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[getMd5Hash(nob.getStringFromBlock())]; !ok {
-				m.NotifyPeers(msg)
+				m.notifyPeers(msg)
 			}
 
 			// TODO: then incorporate the block into the block chain
@@ -293,7 +305,7 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[getMd5Hash(cf.getStringFromOp())]; !ok {
-				m.NotifyPeers(msg)
+				m.notifyPeers(msg)
 			}
 
 			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
@@ -308,7 +320,7 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[getMd5Hash(ar.getStringFromOp())]; !ok {
-				m.NotifyPeers(msg)
+				m.notifyPeers(msg)
 			}
 
 			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
@@ -324,15 +336,14 @@ func (m *Miner) HandlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			SendMsgToTcp(conn, &msg)
 		}
 	}
-}
 
-// SendBlockChain: Sends the entire block chain via the TCP connection
-// conn: the TCP connection to send the block chain to
-// return: error if there are problems sending any of the blocks via the TCP connection
-//         nil if the entire block chain is successfully transmitted
-func (m *Miner) SendBlockChain(conn *net.TCPConn) error {
+	fmt.Printf("Thread successfully stopped for HandlePeerConnectionIn for %s, performing clean up.\n", peerIpPort)
 
-	return errors.New("")
+	close(sig)
+
+	m.lock.Lock()
+	delete(m.PeerChanInSig, peerIpPort)
+	m.lock.Unlock()
 }
 
 func ReadMsgFromTcp(conn *net.TCPConn) (*Message, error){
@@ -385,3 +396,34 @@ func SendMsgToTcp(conn *net.TCPConn, msg *Message) error {
 	return nil
 }
 
+// createOpBlock: Create the next Op block in the block chain
+// prevBlock: is the previous block of the current block that the miner is trying to create
+// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
+//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
+//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
+func (m *Miner) createOpBlock(prevBlock *Block, c chan *Message) (*OpBlock, error) {
+	//STUB
+	return &OpBlock{}, nil
+}
+
+// createNoOpBlock: Create the next No op block in the block chain
+// prevBlock: is the previous block of the current block that the miner is trying to create
+// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
+//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
+//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
+func (m *Miner) createNoOpBlock(prevBlock *Block, c chan *Message) (*NoOpBlock, error) {
+	return &NoOpBlock{}, nil
+}
+
+
+func (m *Miner) StartProcess() {
+	m.startPeerConnections()
+	m.acceptPeerConnections()
+
+	// Wait for 30 seconds to receive the block chain from peers
+	time.Sleep(30 * time.Second)
+
+	// TODO: if block chain is not initialized, initialize it and start generating blocks
+
+	// TODO: else, just start generating blocks
+}
