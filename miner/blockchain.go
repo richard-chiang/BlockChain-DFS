@@ -10,10 +10,12 @@ import (
 	"time"
 )
 
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 type BlockChain struct {
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[uint32] Block         // string is the hash of the block
-	Heads []uint32                         // list of heads on the longest chains
+	BlockChainMap map[uint32] interface{}   // string is the hash of the block
+	Heads []uint32                          // list of heads on the longest chains
 	initialized bool                        // indicates if the block chain has been initialized
 }
 
@@ -31,15 +33,15 @@ type OpBlock struct {
 	Index uint32
 	PrevHash string
 	Sig Signature
-	Operations []Operation                  // List of operations
-	nonce string
+	Operations []interface{}                // List of operations
+	nonce uint32
 }
 
 type NoOpBlock struct {
 	Index uint32                            // Index of the block
 	PrevHash string                         // MD5 hash of the previous bloc
 	Sig Signature							// The signiture of the miner
-	nonce string                            // A 32 bit string as the nonce
+	nonce uint32                            // A 32 bit string as the nonce
 }
 
 // Represents the signature of the block
@@ -65,7 +67,6 @@ type CreateFile struct {
 	OpId OpIdentity
 	FileName string                         // Name of the file that we are creating
 	Cost uint32                             // Cost of creating the file
-	t time.Time                             // Time stamp of the operation
 }
 
 // Two AppendRecord operations are the same if the ClientId are the same and the Rec are the same
@@ -81,24 +82,6 @@ type cryptopuzzle struct {
 	N    int    // PoW difficulty: number of zeroes expected at end of md5
 }
 
-// createOpBlock: Create the next Op block in the block chain
-// prevBlock: is the previous block of the current block that the miner is trying to create
-// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
-//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
-//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
-func (m *Miner) createOpBlock(prevBlock *Block, c chan *Message) (*OpBlock, error) {
-	//STUB
-	return &OpBlock{}, nil
-}
-
-// createNoOpBlock: Create the next No op block in the block chain
-// prevBlock: is the previous block of the current block that the miner is trying to create
-// c: is the channel of message where if a block is received and is the same level as the block the miner is currently
-//    creating, the miner needs to drop the block it's trying to create and incorporate the block into the block chain.
-//    after that, the miner continues to mine blocks, either no-op blocks or op blocks.
-func (m* Miner) createNoOpBlock(prevBlock *Block, c chan *Message) (*NoOpBlock, error) {
-	return &NoOpBlock{}, nil
-}
 
 // isBlockValid: Checks if a block is valid base on below criterias
 // 1. Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
@@ -130,7 +113,7 @@ func (bc *BlockChain) hasEnoughCoins(minerId string, coins uint32) bool {
 // hasConflictingOperations: Check if there are conflicting operations along a particular chain
 // b: the block we are trying to incorporate into the block chain. We will follow the PrevHash until we hit the genesis block
 // returns: true if there are conflicting operations in block b along the block chain.
-func (bc *BlockChain) hasConflictingOperations(b *Block) bool {
+func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 
 	//STUB
 	return false
@@ -142,7 +125,7 @@ func (bc *BlockChain) hasConflictingOperations(b *Block) bool {
 //                       2. Adds the block to BlockChainMap
 //                       3. Remove the parents of the block from Heads list in the BlockChain object
 //                       4. Add this block to the Heads list
-func (bc *BlockChain) AddBlockToBlockChain(b *Block) {
+func (bc *BlockChain) addBlockToBlockChain(b *interface{}) {
 
 }
 
@@ -155,13 +138,13 @@ func getNextBlockSize(min int8, max int8) int8{
 	return 0
 }
 
-func (ob *OpBlock) getStringFromBlock() string {
+func (ob *OpBlock)getStringFromBlock() string {
 
 	//STUB
 	return ""
 }
 
-func (nob *NoOpBlock) getStringFromBlock() string {
+func (nob *NoOpBlock)getStringFromBlock() string {
 
 	//STUB
 	return ""
