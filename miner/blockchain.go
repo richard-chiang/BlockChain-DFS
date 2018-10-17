@@ -4,18 +4,17 @@ import (
 	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
-	"math/rand"
-	"strings"
+	"sync"
 	"time"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+var mutexBC = &sync.Mutex{}                 // the mutex for the block chain data structure
 
 type BlockChain struct {
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[uint32] interface{}   // string is the hash of the block
-	Heads []uint32                          // list of heads on the longest chains
+	BlockChainMap map[string] interface{}   // string is the hash of the block, interface is the block
+	Heads []string                          // list of the hash of blocks on the longest chains
 	initialized bool                        // indicates if the block chain has been initialized
 }
 
@@ -129,6 +128,14 @@ func (bc *BlockChain) addBlockToBlockChain(b *interface{}) {
 
 }
 
+// getLongestChain: Gets the longest block chain preceded the block b
+// b: the block we are trying to find the chain prior to
+// returns a list of hash of ordered blocks from the block chain that preceded block b
+func(bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
+
+	return make([]interface{},0)
+}
+
 // getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
 // records to obtain from PendingOps
 // min: is the minimum block size
@@ -172,58 +179,10 @@ func (ar *AppendRecord) getStringFromOp() string {
 	return ""
 }
 
-func getMd5Hash(str string) string {
+func getMd5Hash(input []byte) string {
 	h := md5.New()
-	h.Write([]byte(str))
+	h.Write(input)
 	res := hex.EncodeToString(h.Sum(nil))
 	return res
 }
 
-
-func calcSecret(problem cryptopuzzle) (nonce string) {
-	result := ""
-
-	for !validNonce(problem.N, result) {
-		nonce = randString()
-		result = computeNonceSecretHash(problem.Hash, nonce)
-	}
-	return
-}
-
-func computeNonceSecretHash(hash string, nonce string) string {
-	return getMd5Hash(hash + nonce)
-}
-
-func validNonce(N int, Hash string) bool {
-	zeros := strings.Repeat("0", N)
-	isValid := strings.HasSuffix(Hash, zeros)
-	fmt.Println("valid: " + Hash)
-	return isValid
-}
-
-func randString() string {
-	// tradeoff
-	// the larger the possible max length of string the longer it takes to generate each string
-	// pro: more possible solutions to try
-	// con: much slower in each try
-	n := rand.Intn(1000)
-	output := make([]byte, n)
-	// We will take n bytes, one byte for each character of output.
-	randomness := make([]byte, n)
-	// read all random
-	_, err := rand.Read(randomness)
-	if err != nil {
-		panic(err)
-	}
-	l := len(letterBytes)
-	// fill output
-	for pos := range output {
-		// get random item
-		random := uint8(randomness[pos])
-		// random % 64
-		randomPos := random % uint8(l)
-		// put into output
-		output[pos] = letterBytes[randomPos]
-	}
-	return string(output)
-}
