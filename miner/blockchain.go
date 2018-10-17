@@ -120,11 +120,10 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 
 
 // AddBlockToBlockChain: Adds the block to the block chain after validating the block
-//                       1. Adds the block to the tree structure
-//                       2. Adds the block to BlockChainMap
-//                       3. Remove the parents of the block from Heads list in the BlockChain object
-//                       4. Add this block to the Heads list
-func (bc *BlockChain) addBlockToBlockChain(b *interface{}) {
+//                       1. Adds the block to BlockChainMap
+//                       2. Remove the parents of the block from Heads list in the BlockChain object
+//                       3. Add this block to the Heads list
+func (bc *BlockChain) addBlockToBlockChain(b *interface{}){
 
 }
 

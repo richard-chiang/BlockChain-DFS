@@ -341,11 +341,11 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			if _, ok := m.DoNotForward[hash]; !ok {
 				m.lock.Lock()
 				m.DoNotForward[hash] = true
+				// TODO: add this operation to list if the message has not been seen before
+				m.PendingOps = append(m.PendingOps, cf)
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
-
-			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
 
 		case 4:
 			var ar AppendRecord
@@ -368,11 +368,11 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			if _, ok := m.DoNotForward[hash]; !ok {
 				m.lock.Lock()
 				m.DoNotForward[hash] = true
+				// TODO: add this operation to list if the message has not been seen before
+				m.PendingOps = append(m.PendingOps, ar)
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
-
-			// TODO: check if this op is already in PendingOps, if not, add it to the end of the list
 
 		case 5:
 			bcBytes, err := json.Marshal(*m.BC)
