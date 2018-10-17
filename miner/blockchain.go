@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 var mutexBC = &sync.Mutex{}                 // the mutex for the block chain data structure
 
 type BlockChain struct {
