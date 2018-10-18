@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 )
 
+var mutexBC = &sync.Mutex{}                 // the mutex for the block chain data structure
+
 type BlockChain struct {
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[uint32]interface{} // string is the hash of the block
-	Heads         []uint32               // list of heads on the longest chains
-	initialized   bool                   // indicates if the block chain has been initialized
+	BlockChainMap map[string] interface{}   // string is the hash of the block, interface is the block
+	Heads []string                          // list of the hash of blocks on the longest chains
+	initialized bool                        // indicates if the block chain has been initialized
 }
 
 type Block interface {
@@ -116,12 +119,19 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 }
 
 // AddBlockToBlockChain: Adds the block to the block chain after validating the block
-//                       1. Adds the block to the tree structure
-//                       2. Adds the block to BlockChainMap
-//                       3. Remove the parents of the block from Heads list in the BlockChain object
-//                       4. Add this block to the Heads list
-func (bc *BlockChain) addBlockToBlockChain(b *interface{}) {
+//                       1. Adds the block to BlockChainMap
+//                       2. Remove the parents of the block from Heads list in the BlockChain object
+//                       3. Add this block to the Heads list
+func (bc *BlockChain) addBlockToBlockChain(b *Block){
 
+}
+
+// getLongestChain: Gets the longest block chain preceded the block b
+// b: the block we are trying to find the chain prior to
+// returns a list of hash of ordered blocks from the block chain that preceded block b
+func(bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
+
+	return make([]interface{},0)
 }
 
 // getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
@@ -165,6 +175,13 @@ func (ar *AppendRecord) getStringFromOp() string {
 	return ""
 }
 
+func getMd5Hash(input string) string {
+	h := md5.New()
+	h.Write([]byte(input))
+	res := hex.EncodeToString(h.Sum(nil))
+	return res
+}
+
 func calcSecret(problem cryptopuzzle) uint32 {
 	result := ""
 	var nonce uint32
@@ -188,11 +205,4 @@ func validNonce(N int, Hash string) bool {
 
 func computeNonceSecretHash(hash string, nonce uint32) string {
 	return getMd5Hash(hash + string(nonce))
-}
-
-func getMd5Hash(str string) string {
-	h := md5.New()
-	h.Write([]byte(str))
-	res := hex.EncodeToString(h.Sum(nil))
-	return res
 }
