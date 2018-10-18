@@ -1,7 +1,6 @@
 package miner
 
 import (
-	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -9,15 +8,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"../rfslib"
 )
 
-var mutexBC = &sync.Mutex{}                 // the mutex for the block chain data structure
+var mutexBC = &sync.Mutex{} // the mutex for the block chain data structure
 
 type BlockChain struct {
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
-	BlockChainMap map[string] interface{}   // string is the hash of the block, interface is the block
-	Heads []string                          // list of the hash of blocks on the longest chains
-	initialized bool                        // indicates if the block chain has been initialized
+	BlockChainMap map[string]interface{} // string is the hash of the block, interface is the block
+	Heads         []string               // list of the hash of blocks on the longest chains
+	initialized   bool                   // indicates if the block chain has been initialized
+	genesisHash   string
 }
 
 type Block interface {
@@ -27,6 +29,7 @@ type Block interface {
 	// getCoinsRequirementInBlock: creates a map of key value pair with key being the miner Id, and value being the total
 	//                             number of coins required for the miner to complete all the operations in the block
 	getCoinsRequirementInBlock() map[string]uint32
+	isSame(other interface{}) bool
 }
 
 // Represents one block in the block chain
@@ -122,16 +125,16 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 //                       1. Adds the block to BlockChainMap
 //                       2. Remove the parents of the block from Heads list in the BlockChain object
 //                       3. Add this block to the Heads list
-func (bc *BlockChain) addBlockToBlockChain(b *Block){
+func (bc *BlockChain) addBlockToBlockChain(b *Block) {
 
 }
 
 // getLongestChain: Gets the longest block chain preceded the block b
 // b: the block we are trying to find the chain prior to
 // returns a list of hash of ordered blocks from the block chain that preceded block b
-func(bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
+func (bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
 
-	return make([]interface{},0)
+	return make([]interface{}, 0)
 }
 
 // getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
@@ -144,15 +147,16 @@ func getNextBlockSize(min int8, max int8) int8 {
 }
 
 func (ob *OpBlock) getStringFromBlock() string {
-
-	//STUB
-	return ""
+	indexString := fmt.Sprint(ob.Index)
+	sigString := fmt.Sprint(ob.Sig)
+	opList := strings.Trim(strings.Join(strings.Split(fmt.Sprint(ob.Operations), " "), ","), "[]")
+	return indexString + ob.PrevHash + sigString + opList
 }
 
 func (nob *NoOpBlock) getStringFromBlock() string {
-
-	//STUB
-	return ""
+	indexString := fmt.Sprint(nob.Index)
+	sigString := fmt.Sprint(nob.Sig)
+	return indexString + nob.PrevHash + sigString
 }
 
 func (ob *OpBlock) getCoinsRequirementInBlock() map[string]uint32 {
@@ -166,20 +170,39 @@ func (nob *NoOpBlock) getCoinsRequirementInBlock() map[string]uint32 {
 }
 
 func (cf *CreateFile) getStringFromOp() string {
-	// STUB
-	return ""
+	op := cf.OpId
+	return op.ClientId + op.MinerId + cf.FileName + fmt.Sprint(cf.Cost)
 }
 
 func (ar *AppendRecord) getStringFromOp() string {
-	// STUB
-	return ""
+	op := ar.OpId
+	opString := op.ClientId + op.MinerId
+	recString := string(ar.Rec[:])
+	costString := fmt.Sprint(ar.Cost)
+	timeString := ar.t.String()
+	return opString + recString + costString + timeString
+}
+
+func (ob OpBlock) isSame(other interface{}) bool {
+	otherBlock := other.(Block)
+
+	myHash := ob.getStringFromBlock()
+	otherHash := otherBlock.getStringFromBlock()
+	return myHash == otherHash
+}
+
+func (nob NoOpBlock) isSame(other interface{}) bool {
+	otherBlock := other.(Block)
+
+	myHash := nob.getStringFromBlock()
+	otherHash := otherBlock.getStringFromBlock()
+	return myHash == otherHash
 }
 
 func getMd5Hash(input string) string {
 	h := md5.New()
 	h.Write([]byte(input))
-	res := hex.EncodeToString(h.Sum(nil))
-	return res
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func calcSecret(problem cryptopuzzle) uint32 {
