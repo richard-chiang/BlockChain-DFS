@@ -122,7 +122,7 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 //                       1. Adds the block to BlockChainMap
 //                       2. Remove the parents of the block from Heads list in the BlockChain object
 //                       3. Add this block to the Heads list
-func (bc *BlockChain) addBlockToBlockChain(b *interface{}){
+func (bc *BlockChain) addBlockToBlockChain(b *Block){
 
 }
 
@@ -177,9 +177,9 @@ func (ar *AppendRecord) getStringFromOp() string {
 	return ""
 }
 
-func getMd5Hash(input []byte) string {
+func getMd5Hash(input string) string {
 	h := md5.New()
-	h.Write(input)
+	h.Write([]byte(input))
 	res := hex.EncodeToString(h.Sum(nil))
 	return res
 }
