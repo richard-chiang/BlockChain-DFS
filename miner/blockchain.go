@@ -187,7 +187,7 @@ func validNonce(N int, Hash string) bool {
 }
 
 func computeNonceSecretHash(hash string, nonce uint32) string {
-	return getMd5Hash(hash + fmt.Sprint(nonce))
+	return getMd5Hash(hash + string(nonce))
 }
 
 func getMd5Hash(str string) string {
