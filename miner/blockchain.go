@@ -4,6 +4,9 @@ import (
 	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
+	"math"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,63 +26,62 @@ type Block interface {
 
 	// getCoinsRequirementInBlock: creates a map of key value pair with key being the miner Id, and value being the total
 	//                             number of coins required for the miner to complete all the operations in the block
-	getCoinsRequirementInBlock() map[string] uint32
+	getCoinsRequirementInBlock() map[string]uint32
 }
 
 // Represents one block in the block chain
 type OpBlock struct {
-	Index uint32
-	PrevHash string
-	Sig Signature
-	Operations []interface{}                // List of operations
-	nonce uint32
+	Index      uint32
+	PrevHash   string
+	Sig        Signature
+	Operations []interface{} // List of operations
+	nonce      uint32
 }
 
 type NoOpBlock struct {
-	Index uint32                            // Index of the block
-	PrevHash string                         // MD5 hash of the previous bloc
-	Sig Signature							// The signiture of the miner
-	nonce uint32                            // A 32 bit string as the nonce
+	Index    uint32    // Index of the block
+	PrevHash string    // MD5 hash of the previous bloc
+	Sig      Signature // The signiture of the miner
+	nonce    uint32    // A 32 bit string as the nonce
 }
 
 // Represents the signature of the block
 type Signature struct {
-	Id string                               // The miner Id that this credit goes to
-	Coins uint32                            // Number of coins that's awarded
+	Id    string // The miner Id that this credit goes to
+	Coins uint32 // Number of coins that's awarded
 }
 
 // The operation interface, CreateFile and AppendRecord are both operations and must implement the Operation interface
 // so we can pass them around as type of Operation
 type Operation interface {
-	isSame(other interface{}) bool          // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
-	getStringFromOp() string                // Gets the string re
+	isSame(other interface{}) bool // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
+	getStringFromOp() string       // Gets the string re
 }
 
 type OpIdentity struct {
-	ClientId string                         // Id of the client that submitted the operation
-	MinerId string                          // Id of the miner who submitted the operation on be half of the client
+	ClientId string // Id of the client that submitted the operation
+	MinerId  string // Id of the miner who submitted the operation on be half of the client
 }
 
 // Two CreateFile operations are the same if the file names are the same
 type CreateFile struct {
-	OpId OpIdentity
-	FileName string                         // Name of the file that we are creating
-	Cost uint32                             // Cost of creating the file
+	OpId     OpIdentity
+	FileName string // Name of the file that we are creating
+	Cost     uint32 // Cost of creating the file
 }
 
 // Two AppendRecord operations are the same if the ClientId are the same and the Rec are the same
 type AppendRecord struct {
 	OpId OpIdentity
-	Rec rfslib.Record                       // 512 byte record
-	Cost uint32                             // Cost of appending the record (always 1 coin)
-	t time.Time                             // Time stamp of the operation
+	Rec  rfslib.Record // 512 byte record
+	Cost uint32        // Cost of appending the record (always 1 coin)
+	t    time.Time     // Time stamp of the operation
 }
 
 type cryptopuzzle struct {
 	Hash string // block hash without nonce
 	N    int    // PoW difficulty: number of zeroes expected at end of md5
 }
-
 
 // isBlockValid: Checks if a block is valid base on below criterias
 // 1. Check that the nonce for the block is valid: PoW is correct and has the right difficulty.
@@ -107,7 +109,6 @@ func (bc *BlockChain) hasEnoughCoins(minerId string, coins uint32) bool {
 	return false
 }
 
-
 // hasConflictingOperations: Check if there are conflicting operations along a particular chain
 // b: the block we are trying to incorporate into the block chain. We will follow the PrevHash until we hit the genesis block
 // returns: true if there are conflicting operations in block b along the block chain.
@@ -116,7 +117,6 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 	//STUB
 	return false
 }
-
 
 // AddBlockToBlockChain: Adds the block to the block chain after validating the block
 //                       1. Adds the block to BlockChainMap
@@ -138,33 +138,31 @@ func(bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
 // records to obtain from PendingOps
 // min: is the minimum block size
 // max: is the maximum block size
-func getNextBlockSize(min int8, max int8) int8{
+func getNextBlockSize(min int8, max int8) int8 {
 	//STUB
 	return 0
 }
 
-func (ob *OpBlock)getStringFromBlock() string {
+func (ob *OpBlock) getStringFromBlock() string {
 
 	//STUB
 	return ""
 }
 
-func (nob *NoOpBlock)getStringFromBlock() string {
+func (nob *NoOpBlock) getStringFromBlock() string {
 
 	//STUB
 	return ""
 }
 
-func (ob *OpBlock)getCoinsRequirementInBlock() map[string] uint32 {
+func (ob *OpBlock) getCoinsRequirementInBlock() map[string]uint32 {
 
-
-	return make(map[string] uint32)
+	return make(map[string]uint32)
 }
 
-func (nob *NoOpBlock)getCoinsRequirementInBlock() map[string] uint32 {
+func (nob *NoOpBlock) getCoinsRequirementInBlock() map[string]uint32 {
 
-
-	return make(map[string] uint32)
+	return make(map[string]uint32)
 }
 
 func (cf *CreateFile) getStringFromOp() string {
@@ -184,3 +182,27 @@ func getMd5Hash(input string) string {
 	return res
 }
 
+func calcSecret(problem cryptopuzzle) uint32 {
+	result := ""
+	var nonce uint32
+
+	for nonce = 0; nonce < math.MaxUint32; nonce++ {
+		result = computeNonceSecretHash(problem.Hash, nonce)
+
+		if validNonce(problem.N, result) {
+			fmt.Println(result)
+			return nonce
+		}
+	}
+	return nonce
+}
+
+func validNonce(N int, Hash string) bool {
+	zeros := strings.Repeat("0", N)
+	isValid := strings.HasSuffix(Hash, zeros)
+	return isValid
+}
+
+func computeNonceSecretHash(hash string, nonce uint32) string {
+	return getMd5Hash(hash + string(nonce))
+}
