@@ -12,6 +12,11 @@ import (
 	"../rfslib"
 )
 
+const (
+	appendCost uint32 = 2
+	createCost uint32 = 1
+)
+
 var mutexBC = &sync.Mutex{} // the mutex for the block chain data structure
 
 type BlockChain struct {
@@ -30,6 +35,7 @@ type Block interface {
 	//                             number of coins required for the miner to complete all the operations in the block
 	getCoinsRequirementInBlock() map[string]uint32
 	isSame(other interface{}) bool
+	getPreviousHash() string
 }
 
 // Represents one block in the block chain
@@ -59,6 +65,7 @@ type Signature struct {
 type Operation interface {
 	isSame(other interface{}) bool // Compares if two operations are the same, they are considered to be the same if the operation Id's are the same between two operations
 	getStringFromOp() string       // Gets the string re
+	getOpID() OpIdentity
 }
 
 type OpIdentity struct {
@@ -126,55 +133,79 @@ func (bc *BlockChain) hasConflictingOperations(b *interface{}) bool {
 //                       2. Remove the parents of the block from Heads list in the BlockChain object
 //                       3. Add this block to the Heads list
 func (bc *BlockChain) addBlockToBlockChain(b *Block) {
-
+	//stub
 }
 
 // getLongestChain: Gets the longest block chain preceded the block b
 // b: the block we are trying to find the chain prior to
 // returns a list of hash of ordered blocks from the block chain that preceded block b
-func (bc *BlockChain) getLongestChain(b *interface{}) []interface{} {
+func (bc *BlockChain) getLongestChain(b interface{}) []interface{} {
+	block := b.(Block)
+	blockchain := bc.BlockChainMap
+	startingHash := bc.genesisHash
+	heads := bc.Heads
+
+	for _, headHash := range heads {
+		bIsInThisHash := false
+		hashChain := bc.generateChain(headHash)
+
+		for _, blockHash := range hashChain {
+			if blockchain[blockHash].(Block).isSame() {
+				bIsInThisHash = true
+				break
+			}
+		}
+	}
+
+	// stub
 
 	return make([]interface{}, 0)
 }
 
-// getNextBlockSize: Helper function to generate a number between the min and max value, used to determine the number of
-// records to obtain from PendingOps
-// min: is the minimum block size
-// max: is the maximum block size
-func getNextBlockSize(min int8, max int8) int8 {
-	//STUB
-	return 0
-}
-
 func (ob *OpBlock) getStringFromBlock() string {
-	indexString := fmt.Sprint(ob.Index)
-	sigString := fmt.Sprint(ob.Sig)
-	opList := strings.Trim(strings.Join(strings.Split(fmt.Sprint(ob.Operations), " "), ","), "[]")
-	return indexString + ob.PrevHash + sigString + opList
+	// Edwin todo
+	return ""
 }
 
 func (nob *NoOpBlock) getStringFromBlock() string {
-	indexString := fmt.Sprint(nob.Index)
-	sigString := fmt.Sprint(nob.Sig)
-	return indexString + nob.PrevHash + sigString
+	// Edwin todo
+	return ""
 }
 
 func (ob *OpBlock) getCoinsRequirementInBlock() map[string]uint32 {
+	page := make(map[string]uint32)
 
-	return make(map[string]uint32)
+	for _, op := range ob.Operations {
+		minerID := op.(Operation).getOpID().MinerId
+		switch v := op.(type) {
+		case CreateFile:
+			page[minerID] += createCost
+		case AppendRecord:
+			page[minerID] += appendCost
+		}
+	}
+
+	return page
 }
 
 func (nob *NoOpBlock) getCoinsRequirementInBlock() map[string]uint32 {
-
 	return make(map[string]uint32)
 }
 
-func (cf *CreateFile) getStringFromOp() string {
+func (cf CreateFile) getOpID() OpIdentity {
+	return cf.OpId
+}
+
+func (ar AppendRecord) getOpID() OpIdentity {
+	return ar.OpId
+}
+
+func (cf CreateFile) getStringFromOp() string {
 	op := cf.OpId
 	return op.ClientId + op.MinerId + cf.FileName + fmt.Sprint(cf.Cost)
 }
 
-func (ar *AppendRecord) getStringFromOp() string {
+func (ar AppendRecord) getStringFromOp() string {
 	op := ar.OpId
 	opString := op.ClientId + op.MinerId
 	recString := string(ar.Rec[:])
@@ -197,6 +228,29 @@ func (nob NoOpBlock) isSame(other interface{}) bool {
 	myHash := nob.getStringFromBlock()
 	otherHash := otherBlock.getStringFromBlock()
 	return myHash == otherHash
+}
+
+func (ob OpBlock) getPreviousHash() string {
+	return ob.PrevHash
+}
+
+func (nob NoOpBlock) getPreviousHash() string {
+	return nob.PrevHash
+}
+
+// given the hash of a head
+// return the chain from the head to genesis hash
+func (bc BlockChain) generateChain(head string) []string {
+	first := bc.BlockChainMap[head].(Block)
+	second := first.getPreviousHash()
+
+	var collector []string
+	for blockHash := head; blockHash != bc.genesisHash; blockHash = bc.BlockChainMap[blockHash].(Block).getPreviousHash() {
+		collector = append(collector, blockHash)
+	}
+
+	collector = append(collector, bc.genesisHash)
+	return collector
 }
 
 func getMd5Hash(input string) string {
