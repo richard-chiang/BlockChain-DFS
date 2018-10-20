@@ -100,9 +100,16 @@ type Cryptopuzzle struct {
 //    inserted into the middled of an rfs file).
 // 6. We need to check there is no conflicting operations along the chain in the block. i.e. there are no two create
 //    operations with the same file name.
-func (bc *BlockChain) isBlockValid(b *Block) bool {
+func (bc *BlockChain) isBlockValid(b Block) bool {
 
 	// TODO: Stub
+	chain := bc.getChainBeforeBlock(b)
+	req := b.getCoinsRequirementInBlock()
+
+	if bc.hasEnoughCoins(chain, req, b) && !bc.hasConflictingOperations(b) {
+		return true
+	}
+
 	return false
 }
 
@@ -167,7 +174,7 @@ func (bc *BlockChain) getCoinBalanceInChain(chain []string, req map[string] int,
 // hasConflictingOperations: Check if there are conflicting operations along a particular chain
 // b: the block we are trying to incorporate into the block chain. We will follow the prevHash until we hit the genesis block
 // returns: true if there are conflicting operations in block b along the block chain.
-func (bc *BlockChain) hasConflictingOperations(b interface{}) bool {
+func (bc *BlockChain) hasConflictingOperations(b Block) bool {
 
 	// TODO: Stub
 	return false
@@ -177,7 +184,7 @@ func (bc *BlockChain) hasConflictingOperations(b interface{}) bool {
 //                       1. Adds the block to blockChainMap
 //                       2. Remove the parents of the block from heads list in the BlockChain object
 //                       3. Add this block to the heads list
-func (bc *BlockChain) addBlockToBlockChain(b *Block){
+func (bc *BlockChain) addBlockToBlockChain(b Block){
 	// TODO: Stub
 }
 
