@@ -1,7 +1,6 @@
-package tests
+package miner
 
 import (
-	miner2 "cpsc416-p1/miner"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,7 +11,7 @@ import (
 
 func TestMinerInitialization(t *testing.T) {
 	jsonPath := "miner1.json"
-	miner, err := miner2.InitializeMiner(jsonPath)
+	miner, err := InitializeMiner(jsonPath)
 
 	if err != nil {
 		fmt.Println(err)
@@ -22,74 +21,74 @@ func TestMinerInitialization(t *testing.T) {
 	expectedPerrs := []string{"123.123.123.123:100", "234.234.234.234:200", "345,345,345.345:300"}
 
 	for idx := 0; idx < len(expectedPerrs); idx++ {
-		if expectedPerrs[idx] != miner.Config.PeerMinersAddrs[idx] {
+		if expectedPerrs[idx] != miner.config.PeerMinersAddrs[idx] {
 			t.Errorf("Field PeerMinersAddrs is not corrected parsed.")
 		}
 	}
 
-	if miner.Config.IncomingMinersAddr != "127.0.0.1:8081" {
+	if miner.config.IncomingMinersAddr != "127.0.0.1:8081" {
 		t.Errorf("Field IncomingMinersAddr is not corrected parsed.")
 	}
 
-	if miner.Config.OutgoingMinersIP != "127.0.0.1:8082" {
+	if miner.config.OutgoingMinersIP != "127.0.0.1:8082" {
 		t.Errorf("Field OutgoingMinersIP is not corrected parsed.")
 	}
 
-	if miner.Config.IncomingClientsAddr != "127.0.0.1:8080" {
+	if miner.config.IncomingClientsAddr != "127.0.0.1:8080" {
 		t.Errorf("Field IncomingClientsAddr is not corrected parsed.")
 	}
 
-	if miner.Config.MinerID != "123456" {
+	if miner.config.MinerID != "123456" {
 		t.Errorf("Field MinerID is not correctly parsed.")
 	}
 
-	if miner.Config.MinedCoinsPerOpBlock != 2 {
+	if miner.config.MinedCoinsPerOpBlock != 2 {
 		t.Errorf("Field MinedCoinsPerOpBlock is not correctly parsed")
 	}
 
-	if miner.Config.MinedCoinsPerNoOpBlock != 3 {
+	if miner.config.MinedCoinsPerNoOpBlock != 3 {
 		t.Errorf("Field MinedCoinsPerNoOpBlock is not correctly parsed")
 	}
 
-	if miner.Config.NumCoinsPerFileCreate != 1 {
+	if miner.config.NumCoinsPerFileCreate != 1 {
 		t.Errorf("Field NumCoinsPerFileCreate is not correctly parsed")
 	}
 
-	if miner.Config.GenesisBlockHash != "qwerwerqwfsdfsadfsdf" {
+	if miner.config.GenesisBlockHash != "qwerwerqwfsdfsadfsdf" {
 		t.Errorf("Field GenesisBlockHash is not correctly parsed")
 	}
 
-	if miner.Config.PowPerOpBlock != 6 {
+	if miner.config.PowPerOpBlock != 6 {
 		t.Error("Field PowPerOpBlock is not correctly parsed")
 	}
 
-	if miner.Config.PowPerNoOpBlock != 5 {
+	if miner.config.PowPerNoOpBlock != 5 {
 		t.Error("Field PowPerNoOpBlock is not correctly parsed")
 	}
 
-	if miner.Config.ConfirmsPerFileCreate != 5 {
+	if miner.config.ConfirmsPerFileCreate != 5 {
 		t.Error("Field ConfirmsPerFileCreate is not correctly parsed")
 	}
 
-	if miner.Config.ConfirmsPerFileAppend != 6 {
+	if miner.config.ConfirmsPerFileAppend != 6 {
 		t.Error("Field ConfirmsPerFileAppend is not correctly parsed")
 	}
 
-	if miner.Config.GenOpBlockTimeout != 5 {
+	if miner.config.GenOpBlockTimeout != 5 {
 		t.Error("Field GenOpBlockTimeout is not correctly parsed")
 	}
 }
 
 func TestP2PMessagePassing(t *testing.T) {
-	id := miner2.OpIdentity{ClientId: "123", MinerId: "345"}
-	op := miner2.CreateFile{OpId: id, FileName: "456", Cost: 5}
+	id := OpIdentity{clientId: "123", minerId: "345"}
+	op := CreateFile{opId: id, fileName: "456", cost: 5}
 
 	b, _ := json.Marshal(op)
 
-	msg := miner2.Message{Type: 3, Content: b}
+	msg := Message{msgType: 3, content: b}
 
-	fmt.Printf("Message type length %v", msg.Type)
-	c := make(chan *miner2.Message)
+	fmt.Printf("Message type length %v", msg.msgType)
+	c := make(chan *Message)
 
 	go Receiver("127.0.0.1:8080", c)
 	time.Sleep(2 * time.Second)
@@ -97,28 +96,28 @@ func TestP2PMessagePassing(t *testing.T) {
 
 	receivedMsg := <- c
 
-	var receivedOp miner2.CreateFile
+	var receivedOp CreateFile
 
-	json.Unmarshal(receivedMsg.Content, &receivedOp)
+	json.Unmarshal(receivedMsg.content, &receivedOp)
 
-	if receivedOp.OpId.ClientId != "123" {
-		t.Error("ClientId is not correct")
+	if receivedOp.opId.clientId != "123" {
+		t.Error("clientId is not correct")
 	}
 
-	if receivedOp.OpId.MinerId != "345" {
-		t.Error("MinerId is not correct")
+	if receivedOp.opId.minerId != "345" {
+		t.Error("minerId is not correct")
 	}
 
-	if receivedOp.FileName != "456" {
-		t.Error("FileName is not correct")
+	if receivedOp.fileName != "456" {
+		t.Error("fileName is not correct")
 	}
 
-	if receivedOp.Cost != 5 {
-		t.Error("Cost is not correct")
+	if receivedOp.cost != 5 {
+		t.Error("cost is not correct")
 	}
 }
 
-func Receiver(ipPort string, c chan *miner2.Message) {
+func Receiver(ipPort string, c chan *Message) {
 	localTcpAddr, err := net.ResolveTCPAddr("tcp", ipPort)
 	if err != nil {
 		fmt.Println("Listener creation failed, please try again.")
@@ -133,7 +132,7 @@ func Receiver(ipPort string, c chan *miner2.Message) {
 		return
 	}
 
-	msg, err := miner2.ReadMsgFromTcp(tcpConn)
+	msg, err := readMsgFromTcp(tcpConn)
 
 	if err != nil {
 		return
@@ -142,7 +141,7 @@ func Receiver(ipPort string, c chan *miner2.Message) {
 	c <- msg
 }
 
-func Sender(ipPortLocal string, ipPortRemote string, msg *miner2.Message) {
+func Sender(ipPortLocal string, ipPortRemote string, msg *Message) {
 	tcpLocalAddr, err := net.ResolveTCPAddr("tcp", ipPortLocal)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
@@ -161,7 +160,7 @@ func Sender(ipPortLocal string, ipPortRemote string, msg *miner2.Message) {
 		return
 	}
 
-	miner2.SendMsgToTcp(tcpConn, msg)
+	sendMsgToTcp(tcpConn, msg)
 }
 
 func TestSignatureString(t *testing.T) {
@@ -172,9 +171,9 @@ func TestSignatureString(t *testing.T) {
 	c1 := uint32(10)
 	c2 := uint32(11)
 
-	sig1 := miner2.Signature{Id: id1, Coins: c1}
-	sig2 := miner2.Signature{Id: id1, Coins: c1}
-	sig3 := miner2.Signature{Id: id2, Coins: c2}
+	sig1 := Signature{id: id1, coins: c1}
+	sig2 := Signature{id: id1, coins: c1}
+	sig3 := Signature{id: id2, coins: c2}
 
 	s1 := sig1.String()
 	s2 := sig2.String()
@@ -193,16 +192,16 @@ func TestBlockHashing(t *testing.T) {
 
 	numZeros := 5
 
-	b := miner2.NoOpBlock{Index: 1, PrevHash: "abcd", Sig: miner2.Signature{Id: "abc", Coins: 10}, Nonce:0}
+	b := NoOpBlock{index: 1, prevHash: "abcd", sig: Signature{id: "abc", coins: 10}, nonce:0}
 
-	b.Nonce = miner2.CalcSecret(miner2.Cryptopuzzle{Hash: b.GetStringWithoutNonce(), N: numZeros})
+	b.nonce = CalcSecret(Cryptopuzzle{Hash: b.getStringWithoutNonce(), N: numZeros})
 
-	hash := miner2.GetMd5Hash(b.String())
+	hash := GetMd5Hash(b.String())
 
 	zeros := strings.Repeat("0", numZeros)
 	isValid := strings.HasSuffix(hash, zeros)
 
 	if !isValid {
-		t.Error("Block hash failed, condition not satisfied")
+		t.Error("Block Hash failed, condition not satisfied")
 	}
 }
