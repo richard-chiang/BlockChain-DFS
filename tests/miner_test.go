@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -163,3 +164,45 @@ func Sender(ipPortLocal string, ipPortRemote string, msg *miner2.Message) {
 	miner2.SendMsgToTcp(tcpConn, msg)
 }
 
+func TestSignatureString(t *testing.T) {
+
+	id1 := "abc"
+	id2 := "def"
+
+	c1 := uint32(10)
+	c2 := uint32(11)
+
+	sig1 := miner2.Signature{Id: id1, Coins: c1}
+	sig2 := miner2.Signature{Id: id1, Coins: c1}
+	sig3 := miner2.Signature{Id: id2, Coins: c2}
+
+	s1 := sig1.String()
+	s2 := sig2.String()
+	s3 := sig3.String()
+
+	if s1 != s2 {
+		t.Error("s1 and s2 string representation should be the same")
+	}
+
+	if s2 == s3 {
+		t.Error("s2 and s3 string representation should be different")
+	}
+}
+
+func TestBlockHashing(t *testing.T) {
+
+	numZeros := 5
+
+	b := miner2.NoOpBlock{Index: 1, PrevHash: "abcd", Sig: miner2.Signature{Id: "abc", Coins: 10}, Nonce:0}
+
+	b.Nonce = miner2.CalcSecret(miner2.Cryptopuzzle{Hash: b.GetStringWithoutNonce(), N: numZeros})
+
+	hash := miner2.GetMd5Hash(b.String())
+
+	zeros := strings.Repeat("0", numZeros)
+	isValid := strings.HasSuffix(hash, zeros)
+
+	if !isValid {
+		t.Error("Block hash failed, condition not satisfied")
+	}
+}

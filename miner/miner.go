@@ -84,7 +84,7 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]interface{}, 0), &BlockChain{make(map[string] interface{}), make([]string, 0), false}, make(map[string] bool),
+	return &Miner{config, make([]interface{}, 0), &BlockChain{make(map[string] interface{}), make([]string, 0), false, ""}, make(map[string] bool),
 	make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
 
@@ -201,7 +201,7 @@ func (m *Miner) handlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			m.lock.Lock()
 			if _, ok := m.DoNotForward[hash]; ok {
@@ -282,7 +282,7 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			if _, ok := m.DoNotForward[hash]; !ok {
 				m.lock.Lock()
@@ -308,7 +308,7 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[hash]; !ok {
@@ -335,7 +335,7 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[hash]; !ok {
@@ -362,7 +362,7 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
 			if _, ok := m.DoNotForward[hash]; !ok {
