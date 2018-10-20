@@ -4,7 +4,6 @@ import (
 	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -26,9 +25,11 @@ type Block interface {
 	getStringWithoutNonce() string // function to get the string representation of the block without the nonce
 	getHash() string               // function to get the Hash base on the string representation of the block
 	getPrevHash() string           // function to get the previous Hash of the block
+	getOps() []interface{}         // gets the list of operations in the block
+	getSig() *Signature            // gets the signature of the block
 	// getCoinsRequirementInBlock: creates a map of key value pair with key being the miner id, and value being the total
 	//                             number of coins required for the miner to complete all the operations in the block
-	getCoinsRequirementInBlock() map[string]uint32
+	getCoinsRequirementInBlock() map[string]int
 }
 
 // Represents one block in the block chain
@@ -50,16 +51,16 @@ type NoOpBlock struct {
 // Represents the signature of the block
 type Signature struct {
 	id    string // The miner id that this credit goes to
-	coins uint32 // Number of coins that's awarded
+	coins int // Number of coins that's awarded
 }
 
 // The operation interface, CreateFile and AppendRecord are both operations and must implement the Operation interface
 // so we can pass them around as type of Operation
 type Operation interface {
-	isSame(other interface{}) bool // Compares if two operations are the same, they are considered to be the same if the operation id's are the same between two operations
+	//isSame(other interface{}) bool // Compares if two operations are the same, they are considered to be the same if the operation id's are the same between two operations
 	String() string                // Gets the string representation of the operation
 	getHash() string               // Gets the Hash of the operation
-	getCost() uint32               // Gets the cost of the operation
+	getCost() int                  // Gets the cost of the operation
 	getId() OpIdentity             // Gets the operation identity of the operation
 }
 
@@ -72,14 +73,14 @@ type OpIdentity struct {
 type CreateFile struct {
 	opId     OpIdentity
 	fileName string // Name of the file that we are creating
-	cost     uint32 // cost of creating the file
+	cost     int // cost of creating the file
 }
 
 // Two AppendRecord operations are the same if the clientId are the same and the rec are the same
 type AppendRecord struct {
 	opId OpIdentity
 	rec  rfslib.Record // 512 byte record
-	cost uint32        // cost of appending the record (always 1 coin)
+	cost int           // cost of appending the record (always 1 coin)
 	t    time.Time     // Time stamp of the operation
 }
 
@@ -106,18 +107,60 @@ func (bc *BlockChain) isBlockValid(b *Block) bool {
 }
 
 // hasEnoughCoins: Determines if a miner has enough coins
-// minerId: the id of the miner where we are trying to determine whether has sufficient coins
-// coins: the minimum number of coins the miner should have
+// req: the map of key value pair of miner id to required coins
+// b: the pointer to the block that we are trying to add to the block chain
 // returns: true if minerId has enough coins to carry out the operations in the block
-func (bc *BlockChain) hasEnoughCoins(minerId string, coins uint32) bool {
+func (bc *BlockChain) hasEnoughCoins(chain []string, req map[string] int, b Block) bool {
 
-	// TODO: Stub
-	return false
+	balance := bc.getCoinBalanceInChain(chain, req, b)
+
+	for minerId, reqCoins := range req {
+		if bal, ok := balance[minerId]; !ok || bal < reqCoins{
+			return false
+		}
+	}
+
+	return true
 }
 
-func (bc *BlockChain) getCoinBalanceInChain(chain []string) map[string] uint32 {
-	balance := make(map[string] uint32)
-	// TODO: Stub
+// getCoinBalanceInChain: gets the balance along the chain for each miner in the req map
+// chain: a list of string that represents the chain we are interested in
+// req: the map of key value pair of miner id to required coins
+// b: the pointer to the block that we are trying to add to the block chain
+// returns: a map of miner id to coin balance
+func (bc *BlockChain) getCoinBalanceInChain(chain []string, req map[string] int, b Block) map[string] int {
+	balance := make(map[string] int)
+
+	// Initialize balance with same miner id with req and 0 as starting balance
+	for minerId := range req {
+		balance[minerId] = 0
+	}
+
+	for _, str := range chain {
+		block, _ := bc.blockChainMap[str]
+		ops := block.(Block).getOps()
+		sig := block.(Block).getSig()
+
+		// Add to balance
+		if _, ok := req[sig.id]; ok {
+			balance[sig.id] += sig.coins
+		}
+
+		// Subtract from balance
+		for _, op := range ops {
+			id := op.(Operation).getId()
+			cost := op.(Operation).getCost()
+
+			if _, ok := req[id.minerId]; ok {
+				balance[id.minerId] -= cost
+			}
+		}
+	}
+
+	if coinsCurrentBlock, ok := req[b.getSig().id]; ok {
+		balance[b.getSig().id] += coinsCurrentBlock
+	}
+
 	return balance
 }
 
@@ -145,7 +188,7 @@ func (bc *BlockChain) addBlockToBlockChain(b *Block){
 func(bc *BlockChain) getChainBeforeBlock(b interface{}) []string {
 
 	prevHash := b.(Block).getPrevHash()
-	chain := []string{prevHash}
+	chain := make([]string, 0)
 
 	for prevHash != bc.genesisHash {
 		chain = append([]string{prevHash}, chain...)
@@ -155,7 +198,7 @@ func(bc *BlockChain) getChainBeforeBlock(b interface{}) []string {
 	return chain
 }
 
-func (ob *OpBlock) getStringWithoutNonce() string {
+func (ob OpBlock) getStringWithoutNonce() string {
 
 	str := string(ob.index) + ob.prevHash + ob.sig.String()
 
@@ -166,25 +209,25 @@ func (ob *OpBlock) getStringWithoutNonce() string {
 	return str
 }
 
-func (ob *OpBlock) String() string {
+func (ob OpBlock) String() string {
 
 	return ob.getStringWithoutNonce() + string(ob.nonce)
 }
 
-func (nob *NoOpBlock) getStringWithoutNonce() string {
+func (nob NoOpBlock) getStringWithoutNonce() string {
 	return string(nob.index) + nob.prevHash + nob.sig.String()
 }
 
-func (nob *NoOpBlock) String() string {
+func (nob NoOpBlock) String() string {
 
 	return nob.getStringWithoutNonce() + string(nob.nonce)
 }
 
-func (ob *OpBlock) getHash() string {
+func (ob OpBlock) getHash() string {
 	return GetMd5Hash(ob.String())
 }
 
-func (nob *NoOpBlock) getHash() string {
+func (nob NoOpBlock) getHash() string {
 	return GetMd5Hash(nob.String())
 }
 
@@ -196,8 +239,8 @@ func (nob NoOpBlock) getPrevHash() string {
 	return nob.prevHash
 }
 
-func (ob *OpBlock) getCoinsRequirementInBlock() map[string]uint32 {
-	coinReq := make(map[string]uint32)
+func (ob OpBlock) getCoinsRequirementInBlock() map[string]int {
+	coinReq := make(map[string]int)
 
 	for _, op := range ob.operations {
 		minerId := op.(Operation).getId().minerId
@@ -212,47 +255,63 @@ func (ob *OpBlock) getCoinsRequirementInBlock() map[string]uint32 {
 	return coinReq
 }
 
-func (nob *NoOpBlock) getCoinsRequirementInBlock() map[string]uint32 {
-	return make(map[string]uint32)
+func (nob NoOpBlock) getCoinsRequirementInBlock() map[string]int {
+	return make(map[string]int)
 }
 
-func (cf *CreateFile) String() string {
+func (ob OpBlock) getOps() []interface{} {
+	return ob.operations
+}
+
+func (nob NoOpBlock) getOps() []interface{} {
+	return make([]interface{},0)
+}
+
+func (ob OpBlock) getSig() *Signature {
+	return &ob.sig
+}
+
+func (nob NoOpBlock) getSig() *Signature {
+	return &nob.sig
+}
+
+func (cf CreateFile) String() string {
 	return cf.opId.String() + cf.fileName + string(cf.cost)
 }
 
-func (ar *AppendRecord) String() string {
+func (ar AppendRecord) String() string {
 	return ar.opId.String() + string(ar.rec[:]) + string(ar.cost) + ar.t.String()
 }
 
-func (cf *CreateFile) getHash() string {
+func (cf CreateFile) getHash() string {
 	return GetMd5Hash(cf.String())
 }
 
-func (ar *AppendRecord) getHash() string {
+func (ar AppendRecord) getHash() string {
 	return GetMd5Hash(ar.String())
 }
 
-func (cf *CreateFile) getCost() uint32 {
+func (cf CreateFile) getCost() int {
 	return cf.cost
 }
 
-func (ar *AppendRecord) getCost() uint32 {
+func (ar AppendRecord) getCost() int {
 	return ar.cost
 }
 
-func (cf *CreateFile) getId() OpIdentity {
+func (cf CreateFile) getId() OpIdentity {
 	return cf.opId
 }
 
-func (ar *AppendRecord) getId() OpIdentity {
+func (ar AppendRecord) getId() OpIdentity {
 	return ar.opId
 }
 
-func(opid *OpIdentity) String() string {
+func(opid OpIdentity) String() string {
 	return opid.clientId + opid.minerId
 }
 
-func(sig *Signature) String() string {
+func(sig Signature) String() string {
 	return sig.id + string(sig.coins)
 }
 
@@ -269,9 +328,7 @@ func CalcSecret(problem Cryptopuzzle) uint32 {
 
 	for nonce = 0; nonce < math.MaxUint32; nonce++ {
 		result = computeNonceSecretHash(problem.Hash, nonce)
-
 		if validNonce(problem.N, result) {
-			fmt.Println(result)
 			return nonce
 		}
 	}
