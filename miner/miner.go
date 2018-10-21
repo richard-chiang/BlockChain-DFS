@@ -18,42 +18,42 @@ var TCP_PROTO = "tcp"
 const MSG_SIZE = 4                          // 4 bytes in size
 
 type Miner struct {
-	Config Config                           // Configuration of the miner
-	PendingOps []interface{}                // A list of operations, operations could be CreateFile or AppendRecord
-	BC *BlockChain                          // Placeholder for the block chain
-	DoNotForward map[string] bool           // A map that keeps track of the message that shouldn't be forwarded, the string
-	                                        // is the hash of the message, the bool is a place holder that does not store any meaningful information
-	PeerChanOut map[string] chan *Message   // Map of peer ipport to channels that contains messages to be forwarded to the peers
-	PeerChanOutSig map[string] chan int     // Map of peer ipport to channels to send kill signals to incoming connection handler processes
-	PeerChanInSig map[string] chan int      // Map of peer ipport to channels to send kill signals to outgoing connection handler processes
-	PeerChanIn chan *Message                // A chanel to receive message from peers, different handler will be called depending on different messages
+	config Config                           // Configuration of the miner
+	pendingOps []interface{}                // A list of Operations, Operations could be CreateFile or AppendRecord
+	bc *BlockChain                          // Placeholder for the block chain
+	doNotForward map[string] bool           // A map that keeps track of the message that shouldn'T be forwarded, the string
+	                                        // is the Hash of the message, the bool is a place holder that does not store any meaningful information
+	peerChanOut map[string] chan *Message   // Map of peer ipport to channels that contains messages to be forwarded to the peers
+	peerChanOutSig map[string] chan int     // Map of peer ipport to channels to send kill signals to incoming connection handler processes
+	peerChanInSig map[string] chan int      // Map of peer ipport to channels to send kill signals to outgoing connection handler processes
+	peerChanIn chan *Message                // A chanel to receive message from peers, different handler will be called depending on different messages
 	lock *sync.Mutex                        // The mutex to synchronize the data structure access of processes
 }
 
 // Represents the configuration of the miner, the configuration will be loaded from a JSON file
 type Config struct {
-	PeerMinersAddrs []string                // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
-	IncomingMinersAddr string               // The TcpIp:port where this miner can receive connections from other miners.
-	OutgoingMinersIP string                 // The local IP that the miner should use to connect to peer miners
-	IncomingClientsAddr string              // The TcpIp:port where this miner can receive connections from rfs clients.
-	MinerID string                          // The ID of this miner
-	MinedCoinsPerOpBlock uint32             // The number of record coins mined for an op block
-	MinedCoinsPerNoOpBlock uint32           // The number of record coins mined for a no-op block
-	NumCoinsPerFileCreate uint32            // The number of record coins charged for creating a file
-	GenesisBlockHash string                 // The genesis (first) block MD5 hash for this blockchain
-	PowPerOpBlock uint32                    // The op block difficulty (proof of work setting: number of zeroes)
-	PowPerNoOpBlock uint32                  // The no-op block difficulty (proof of work setting: number of zeroes)
-	ConfirmsPerFileCreate uint32            // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
-	ConfirmsPerFileAppend uint32            // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
-	GenOpBlockTimeout uint32                // Time in milliseconds, the minimum time between op block mining
+	PeerMinersAddrs        []string // A list of TCP IP:port strings that are the set of peer miners that this miner should connect to.
+	IncomingMinersAddr     string   // The TcpIp:port where this miner can receive connections from other miners.
+	OutgoingMinersIP       string   // The local IP that the miner should use to connect to peer miners
+	IncomingClientsAddr    string   // The TcpIp:port where this miner can receive connections from rfs clients.
+	MinerID                string   // The ID of this miner
+	MinedCoinsPerOpBlock   uint32   // The number of record Coins mined for an op block
+	MinedCoinsPerNoOpBlock uint32   // The number of record Coins mined for a no-op block
+	NumCoinsPerFileCreate uint32    // The number of record Coins charged for creating a file
+	GenesisBlockHash string         // The genesis (first) block MD5 Hash for this blockchain
+	PowPerOpBlock uint32            // The op block difficulty (proof of work setting: number of zeroes)
+	PowPerNoOpBlock uint32          // The no-op block difficulty (proof of work setting: number of zeroes)
+	ConfirmsPerFileCreate uint32    // The number of confirmations for a create file operation (the number of blocks that must follow the block containing a create file operation along longest chain before the CreateFile call can return successfully)
+	ConfirmsPerFileAppend uint32    // The number of confirmations for an append operation (the number of blocks that must follow the block containing an append operation along longest chain before the AppendRec call can return successfully)
+	GenOpBlockTimeout uint32        // Time in milliseconds, the minimum time between op block mining
 }
 
 // Container used to send data over the network, Content is the serialized Operations, Block or BlockChain to be sent
 // across the network
 type Message struct {
-	Type uint16                             // 0 is the entire block chain, 1 is op block, 2 is NoOpBlock, 3 is CreateFile operation,
+	MsgType uint16 // 0 is the entire block chain, 1 is op block, 2 is NoOpBlock, 3 is CreateFile operation,
 											// 4 is AppendRecord operation, 5 is request to send the entire block chain
-	T time.Time                             // Time stamp set by the client or the miner represents the client in order to differentiate messages
+	T       time.Time // Time stamp set by the client or the miner represents the client in order to differentiate messages
 	Content []byte
 }
 
@@ -84,14 +84,14 @@ func InitializeMiner(pathToJson string) (*Miner, error){
 	}
 
 
-	return &Miner{config, make([]interface{}, 0), &BlockChain{make(map[string] interface{}), make([]string, 0), false}, make(map[string] bool),
+	return &Miner{config, make([]interface{}, 0), &BlockChain{make(map[string] interface{}), make([]string, 0), false, ""}, make(map[string] bool),
 	make(map[string] chan *Message), make(map[string] chan int), make(map[string] chan int), make(chan *Message), &sync.Mutex{}}, nil
 }
 
 // AcceptPeerConnections: Accepts peer connections on the IncomingMinersAddr specified in the JSON configuration file
 func (m *Miner) acceptPeerConnections() {
 	for {
-		localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.IncomingMinersAddr)
+		localTcpAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.config.IncomingMinersAddr)
 		if err != nil {
 			fmt.Println("Listener creation failed, please try again.")
 			return
@@ -110,13 +110,13 @@ func (m *Miner) acceptPeerConnections() {
 		m.lock.Lock()
 
 		msgChan := make(chan *Message)
-		m.PeerChanOut[peerIpPort] = msgChan
+		m.peerChanOut[peerIpPort] = msgChan
 
 		killSigIn := make(chan int)
-		m.PeerChanInSig[peerIpPort] = killSigIn
+		m.peerChanInSig[peerIpPort] = killSigIn
 
 		killSigOut := make(chan int)
-		m.PeerChanOutSig[peerIpPort] = killSigOut
+		m.peerChanOutSig[peerIpPort] = killSigOut
 
 		m.lock.Unlock()
 
@@ -127,12 +127,12 @@ func (m *Miner) acceptPeerConnections() {
 
 // StartPeerConnections: starts connections to peers specified in the JSON configuration file
 func(m *Miner) startPeerConnections() {
-	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.Config.OutgoingMinersIP)
+	tcpLocalAddr, err := net.ResolveTCPAddr(TCP_PROTO, m.config.OutgoingMinersIP)
 	if err != nil {
 		panic("Unable to resolve local TCP address")
 	}
 
-	for _, peerIpPort := range m.Config.PeerMinersAddrs {
+	for _, peerIpPort := range m.config.PeerMinersAddrs {
 		tcpPeerAddr, err := net.ResolveTCPAddr(TCP_PROTO, peerIpPort)
 		if err != nil {
 			fmt.Println("Unable to resolve peer IpPort:", peerIpPort)
@@ -149,13 +149,13 @@ func(m *Miner) startPeerConnections() {
 		m.lock.Lock()
 
 		msgChan := make(chan *Message)
-		m.PeerChanOut[peerIpPort] = msgChan
+		m.peerChanOut[peerIpPort] = msgChan
 
 		killSigIn := make(chan int)
-		m.PeerChanInSig[peerIpPort] = killSigIn
+		m.peerChanInSig[peerIpPort] = killSigIn
 
 		killSigOut := make(chan int)
-		m.PeerChanOutSig[peerIpPort] = killSigOut
+		m.peerChanOutSig[peerIpPort] = killSigOut
 
 		m.lock.Unlock()
 
@@ -173,18 +173,18 @@ func(m *Miner) startPeerConnections() {
 //              corresponding peers
 // msg: the message to be sent
 func(m *Miner) notifyPeers(msg *Message) {
-	for _, v := range m.PeerChanOut {
+	for _, v := range m.peerChanOut {
 		v <- msg
 	}
 }
 
 // HandlePeerConnectionOut: waiting to receive message from the channel and forward the messages to peers
 //                          when the connection with the peer is closed, this process will be killed.
-//                          this process will handle the connection closure so HandlePeerConnectionIn doesn't have to
+//                          this process will handle the connection closure so HandlePeerConnectionIn doesn'T have to
 //                          worry about it.
 // conn: the TCP connection with one peer
 // c: the channel of message that this process waits to receive message from
-// sig: the channel this process receives the kill signal
+// Sig: the channel this process receives the kill signal
 func (m *Miner) handlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, msgChan chan *Message, sig chan int) {
 	for {
 		select {
@@ -197,20 +197,20 @@ func (m *Miner) handlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 			msgBytes, err := msg.getBytesFromMsg()
 
 			if err != nil {
-				fmt.Println("Get message hash failed.")
+				fmt.Println("Get message Hash failed.")
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			m.lock.Lock()
-			if _, ok := m.DoNotForward[hash]; ok {
+			if _, ok := m.doNotForward[hash]; ok {
 				forward = false
 			}
 
 			if forward {
-				m.DoNotForward[hash] = true
-				SendMsgToTcp(conn, msg)
+				m.doNotForward[hash] = true
+				sendMsgToTcp(conn, msg)
 			}
 			m.lock.Unlock()
 		default:
@@ -225,15 +225,15 @@ func (m *Miner) handlePeerConnectionOut(peerIpPort string, conn *net.TCPConn, ms
 	close(sig)
 
 	m.lock.Lock()
-	delete(m.PeerChanOutSig, peerIpPort)
-	delete(m.PeerChanOut, peerIpPort)
+	delete(m.peerChanOutSig, peerIpPort)
+	delete(m.peerChanOut, peerIpPort)
 	m.lock.Unlock()
 }
 
 // HandlePeerConnectionIn: waiting to receive message from the tcp connection, write this message to the out going channel
 //                         of all peers and handle the message depending on message types
 // conn: the TCP connection with one peer
-// sig: the channel this process receives the kill signal
+// Sig: the channel this process receives the kill signal
 func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig chan int) {
 
 	for {
@@ -244,18 +244,18 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 		default:
 		}
 
-		msg, err := ReadMsgFromTcp(conn)
+		msg, err := readMsgFromTcp(conn)
 
 		if err != nil {
 			fmt.Println("Message read failed.")
 			continue
 		}
 
-		switch msg.Type {
+		switch msg.MsgType {
 		// TODO: wait for a while, if no block chain received, need to start mining no op blocks on its own
 		// TODO: this to do is just a reminder, the actual implementation should be else where
 		case 0:
-			if !m.BC.initialized {
+			if !m.bc.Initialized {
 				var bc BlockChain
 				err := json.Unmarshal(msg.Content, &bc)
 				if err != nil {
@@ -263,7 +263,7 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 					continue
 				}
 
-				m.BC = &bc
+				m.bc = &bc
 			}
 
 		case 1:
@@ -278,15 +278,15 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			msgBytes, err := msg.getBytesFromMsg()
 
 			if err != nil {
-				fmt.Println("Get message hash failed.")
+				fmt.Println("Get message Hash failed.")
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
-			if _, ok := m.DoNotForward[hash]; !ok {
+			if _, ok := m.doNotForward[hash]; !ok {
 				m.lock.Lock()
-				m.DoNotForward[hash] = true
+				m.doNotForward[hash] = true
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
@@ -304,16 +304,16 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			msgBytes, err := msg.getBytesFromMsg()
 
 			if err != nil {
-				fmt.Println("Get message hash failed.")
+				fmt.Println("Get message Hash failed.")
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
-			if _, ok := m.DoNotForward[hash]; !ok {
+			if _, ok := m.doNotForward[hash]; !ok {
 				m.lock.Lock()
-				m.DoNotForward[hash] = true
+				m.doNotForward[hash] = true
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
@@ -331,18 +331,18 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			msgBytes, err := msg.getBytesFromMsg()
 
 			if err != nil {
-				fmt.Println("Get message hash failed.")
+				fmt.Println("Get message Hash failed.")
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
-			if _, ok := m.DoNotForward[hash]; !ok {
+			if _, ok := m.doNotForward[hash]; !ok {
 				m.lock.Lock()
-				m.DoNotForward[hash] = true
+				m.doNotForward[hash] = true
 				// TODO: add this operation to list if the message has not been seen before
-				m.PendingOps = append(m.PendingOps, cf)
+				m.pendingOps = append(m.pendingOps, cf)
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
@@ -358,31 +358,31 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 			msgBytes, err := msg.getBytesFromMsg()
 
 			if err != nil {
-				fmt.Println("Get message hash failed.")
+				fmt.Println("Get message Hash failed.")
 				continue
 			}
 
-			hash := getMd5Hash(msgBytes)
+			hash := GetMd5Hash(string(msgBytes))
 
 			// If not exist in the DoNotForward map, then forward to peers
-			if _, ok := m.DoNotForward[hash]; !ok {
+			if _, ok := m.doNotForward[hash]; !ok {
 				m.lock.Lock()
-				m.DoNotForward[hash] = true
+				m.doNotForward[hash] = true
 				// TODO: add this operation to list if the message has not been seen before
-				m.PendingOps = append(m.PendingOps, ar)
+				m.pendingOps = append(m.pendingOps, ar)
 				m.lock.Unlock()
 				m.notifyPeers(msg)
 			}
 
 		case 5:
-			bcBytes, err := json.Marshal(*m.BC)
+			bcBytes, err := json.Marshal(*m.bc)
 
 			if err != nil {
 				fmt.Println("Encoding of block chain failed")
 				continue
 			}
 			msg := Message{0, time.Now().UTC(), bcBytes}
-			SendMsgToTcp(conn, &msg)
+			sendMsgToTcp(conn, &msg)
 		}
 	}
 
@@ -391,11 +391,11 @@ func (m *Miner) handlePeerConnectionIn(peerIpPort string, conn *net.TCPConn, sig
 	close(sig)
 
 	m.lock.Lock()
-	delete(m.PeerChanInSig, peerIpPort)
+	delete(m.peerChanInSig, peerIpPort)
 	m.lock.Unlock()
 }
 
-func ReadMsgFromTcp(conn *net.TCPConn) (*Message, error){
+func readMsgFromTcp(conn *net.TCPConn) (*Message, error){
 	var msg Message
 	sizeBuf := make([]byte, MSG_SIZE)
 	_, err := conn.Read(sizeBuf)
@@ -427,7 +427,7 @@ func ReadMsgFromTcp(conn *net.TCPConn) (*Message, error){
 	return &msg, nil
 }
 
-func SendMsgToTcp(conn *net.TCPConn, msg *Message) error {
+func sendMsgToTcp(conn *net.TCPConn, msg *Message) error {
 
 	msgBytes, err := json.Marshal(*msg)
 
@@ -467,19 +467,19 @@ func (m *Miner) createNoOpBlock(prevBlock *Block, c chan *Message) (*NoOpBlock, 
 
 func (m *Miner) StartProcess() {
 	m.startPeerConnections()
-	m.acceptPeerConnections()
+	go m.acceptPeerConnections()
 
 	// Wait for 30 seconds to receive the block chain from peers
 	time.Sleep(30 * time.Second)
 
-	// TODO: if block chain is not initialized, initialize it and start generating blocks
+	// TODO: if block chain is not Initialized, initialize it and start generating blocks
 
 	// TODO: else, just start generating blocks
 }
 
 func (ms *Message) getBytesFromMsg() ([]byte, error) {
 	msgTypeBytes := make([]byte, 2)
-	binary.LittleEndian.PutUint16(msgTypeBytes, uint16(ms.Type))
+	binary.LittleEndian.PutUint16(msgTypeBytes, uint16(ms.MsgType))
 
 	timeStampBytes, err := ms.T.MarshalBinary()
 
