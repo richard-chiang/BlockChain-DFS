@@ -164,8 +164,8 @@ func (bc *BlockChain) getCoinBalanceInChain(chain []string, req map[string] int,
 		}
 	}
 
-	if coinsCurrentBlock, ok := req[b.getSig().Id]; ok {
-		balance[b.getSig().Id] += coinsCurrentBlock
+	if _, ok := req[b.getSig().Id]; ok {
+		balance[b.getSig().Id] += b.getSig().Coins
 	}
 
 	return balance

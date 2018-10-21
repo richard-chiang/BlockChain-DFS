@@ -207,6 +207,7 @@ func TestBlockHashing(t *testing.T) {
 	}
 }
 
+// Enough balance
 func TestHasEnoughCoins1(t *testing.T) {
 	// First case, check balance and has enough coin
 	gHash := "12344567"
@@ -263,3 +264,120 @@ func TestHasEnoughCoins1(t *testing.T) {
 		t.Error("hasEnoughCoins returned wrong result, should have been true but got false")
 	}
 }
+
+// Not enough balance for miner 345
+func TestHasEnoughCoins2(t *testing.T) {
+	// First case, check balance and has enough coin
+	gHash := "12344567"
+	numZeros := 4
+	op1 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "a", Cost: 2}
+	op2 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "b", Cost: 3}
+	op3 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "c", Cost: 5}
+	op4 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "d", Cost: 4}
+	op5 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "e", Cost: 1}
+	op6 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "f", Cost: 2}
+
+	opBlock1 := OpBlock{Index: 1, PrevHash: gHash, Sig: Signature{Id: "123", Coins: 10}, Operations: []interface{}{op1, op3}, Nonce: 0}
+	opBlock1.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock1.getStringWithoutNonce(), N: numZeros})
+
+	opBlock2 := OpBlock{Index: 2, PrevHash: opBlock1.getHash(), Sig: Signature{Id: "345", Coins: 10}, Operations: []interface{}{op2, op4}, Nonce: 0}
+	opBlock2.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock2.getStringWithoutNonce(), N: numZeros})
+
+	opBlock3 := OpBlock{Index: 3, PrevHash: opBlock2.getHash(), Sig: Signature{Id: "456", Coins: 10}, Operations: []interface{}{op5, op6}, Nonce: 0}
+	opBlock3.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock3.getStringWithoutNonce(), N: numZeros})
+
+	bc := BlockChain{BlockChainMap: map[string] interface{}{opBlock1.getHash(): opBlock1, opBlock2.getHash(): opBlock2}, Heads:[]string{opBlock2.getHash()}, Initialized: true, GenesisHash: gHash}
+
+	chain := bc.getChainBeforeBlock(opBlock3)
+	expectedChain := []string{opBlock1.getHash(), opBlock2.getHash()}
+	if len(chain) != len(expectedChain) {
+		t.Error("Different number of blocks between expected chain and actual chain")
+	}
+	for idx := 0; idx < len(expectedChain); idx ++ {
+		if chain[idx] != expectedChain[idx] {
+			t.Error("Chain before block is not generated correctly")
+		}
+	}
+
+
+	req := opBlock3.getCoinsRequirementInBlock()
+
+	balance := bc.getCoinBalanceInChain(chain, req, opBlock3)
+	expectedBalance := map[string] int {"123": 5, "345": 1}
+
+	if len(balance) != len(expectedBalance) {
+		t.Error("Different number of items between expectedBalance and actual balance")
+	}
+	for minerId, expectedbal := range expectedBalance {
+		actBal := balance[minerId]
+
+		if actBal != expectedbal {
+			t.Error("Expected balance:", expectedbal, "Actual balance:", actBal)
+		}
+	}
+
+	hasEnoughCoins := bc.hasEnoughCoins(chain, req, opBlock3)
+
+	if hasEnoughCoins {
+		t.Error("hasEnoughCoins returned wrong result, should have been false but got true")
+	}
+}
+
+// Enough balance for miner 345 due to block3
+func TestHasEnoughCoins3(t *testing.T) {
+	// First case, check balance and has enough coin
+	gHash := "12344567"
+	numZeros := 4
+	op1 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "a", Cost: 2}
+	op2 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "b", Cost: 3}
+	op3 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "c", Cost: 5}
+	op4 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "d", Cost: 4}
+	op5 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "e", Cost: 1}
+	op6 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "f", Cost: 2}
+
+	opBlock1 := OpBlock{Index: 1, PrevHash: gHash, Sig: Signature{Id: "123", Coins: 10}, Operations: []interface{}{op1, op3}, Nonce: 0}
+	opBlock1.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock1.getStringWithoutNonce(), N: numZeros})
+
+	opBlock2 := OpBlock{Index: 2, PrevHash: opBlock1.getHash(), Sig: Signature{Id: "345", Coins: 10}, Operations: []interface{}{op2, op4}, Nonce: 0}
+	opBlock2.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock2.getStringWithoutNonce(), N: numZeros})
+
+	opBlock3 := OpBlock{Index: 3, PrevHash: opBlock2.getHash(), Sig: Signature{Id: "345", Coins: 10}, Operations: []interface{}{op5, op6}, Nonce: 0}
+	opBlock3.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock3.getStringWithoutNonce(), N: numZeros})
+
+	bc := BlockChain{BlockChainMap: map[string] interface{}{opBlock1.getHash(): opBlock1, opBlock2.getHash(): opBlock2}, Heads:[]string{opBlock2.getHash()}, Initialized: true, GenesisHash: gHash}
+
+	chain := bc.getChainBeforeBlock(opBlock3)
+	expectedChain := []string{opBlock1.getHash(), opBlock2.getHash()}
+	if len(chain) != len(expectedChain) {
+		t.Error("Different number of blocks between expected chain and actual chain")
+	}
+	for idx := 0; idx < len(expectedChain); idx ++ {
+		if chain[idx] != expectedChain[idx] {
+			t.Error("Chain before block is not generated correctly")
+		}
+	}
+
+
+	req := opBlock3.getCoinsRequirementInBlock()
+
+	balance := bc.getCoinBalanceInChain(chain, req, opBlock3)
+	expectedBalance := map[string] int {"123": 5, "345": 11}
+
+	if len(balance) != len(expectedBalance) {
+		t.Error("Different number of items between expectedBalance and actual balance")
+	}
+	for minerId, expectedbal := range expectedBalance {
+		actBal := balance[minerId]
+
+		if actBal != expectedbal {
+			t.Error("Expected balance:", expectedbal, "Actual balance:", actBal)
+		}
+	}
+
+	hasEnoughCoins := bc.hasEnoughCoins(chain, req, opBlock3)
+
+	if !hasEnoughCoins {
+		t.Error("hasEnoughCoins returned wrong result, should have been true but got false")
+	}
+}
+
