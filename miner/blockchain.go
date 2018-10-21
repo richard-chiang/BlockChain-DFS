@@ -1,19 +1,13 @@
 package miner
 
 import (
+	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
 	"math"
 	"strings"
 	"sync"
 	"time"
-
-	"../rfslib"
-)
-
-const (
-	appendCost uint32 = 2
-	createCost uint32 = 1
 )
 
 var mutexBC = &sync.Mutex{} // the mutex for the block chain data structure
