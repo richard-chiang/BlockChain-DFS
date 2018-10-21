@@ -80,14 +80,15 @@ func TestMinerInitialization(t *testing.T) {
 }
 
 func TestP2PMessagePassing(t *testing.T) {
-	id := OpIdentity{clientId: "123", minerId: "345"}
-	op := CreateFile{opId: id, fileName: "456", cost: 5}
+	id := OpIdentity{ClientId: "123", MinerId: "345"}
+	op := CreateFile{OpId: id, FileName: "456", Cost: 5}
 
 	b, _ := json.Marshal(op)
 
-	msg := Message{msgType: 3, content: b}
+	nowTime := time.Now()
+	msg := Message{MsgType: 3, T: nowTime, Content: b}
 
-	fmt.Printf("Message type length %v", msg.msgType)
+	fmt.Printf("Message type length %v\n", msg.MsgType)
 	c := make(chan *Message)
 
 	go Receiver("127.0.0.1:8080", c)
@@ -98,22 +99,22 @@ func TestP2PMessagePassing(t *testing.T) {
 
 	var receivedOp CreateFile
 
-	json.Unmarshal(receivedMsg.content, &receivedOp)
+	json.Unmarshal(receivedMsg.Content, &receivedOp)
 
-	if receivedOp.opId.clientId != "123" {
-		t.Error("clientId is not correct")
+	if receivedOp.OpId.ClientId != "123" {
+		t.Error("ClientId is not correct")
 	}
 
-	if receivedOp.opId.minerId != "345" {
-		t.Error("minerId is not correct")
+	if receivedOp.OpId.MinerId != "345" {
+		t.Error("MinerId is not correct")
 	}
 
-	if receivedOp.fileName != "456" {
-		t.Error("fileName is not correct")
+	if receivedOp.FileName != "456" {
+		t.Error("FileName is not correct")
 	}
 
-	if receivedOp.cost != 5 {
-		t.Error("cost is not correct")
+	if receivedOp.Cost != 5 {
+		t.Error("Cost is not correct")
 	}
 }
 
@@ -171,9 +172,9 @@ func TestSignatureString(t *testing.T) {
 	c1 := 10
 	c2 := 11
 
-	sig1 := Signature{id: id1, coins: c1}
-	sig2 := Signature{id: id1, coins: c1}
-	sig3 := Signature{id: id2, coins: c2}
+	sig1 := Signature{Id: id1, Coins: c1}
+	sig2 := Signature{Id: id1, Coins: c1}
+	sig3 := Signature{Id: id2, Coins: c2}
 
 	s1 := sig1.String()
 	s2 := sig2.String()
@@ -192,9 +193,9 @@ func TestBlockHashing(t *testing.T) {
 
 	numZeros := 5
 
-	b := NoOpBlock{index: 1, prevHash: "abcd", sig: Signature{id: "abc", coins: 10}, nonce:0}
+	b := NoOpBlock{Index: 1, PrevHash: "abcd", Sig: Signature{Id: "abc", Coins: 10}, Nonce:0}
 
-	b.nonce = CalcSecret(Cryptopuzzle{Hash: b.getStringWithoutNonce(), N: numZeros})
+	b.Nonce = CalcSecret(Cryptopuzzle{Hash: b.getStringWithoutNonce(), N: numZeros})
 
 	hash := GetMd5Hash(b.String())
 
@@ -210,23 +211,23 @@ func TestHasEnoughCoins1(t *testing.T) {
 	// First case, check balance and has enough coin
 	gHash := "12344567"
 	numZeros := 4
-	op1 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"123"}, fileName: "a", cost: 2}
-	op2 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"123"}, fileName: "b", cost: 3}
-	op3 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"345"}, fileName: "c", cost: 2}
-	op4 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"345"}, fileName: "d", cost: 2}
-	op5 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"123"}, fileName: "e", cost: 1}
-	op6 := CreateFile{opId:OpIdentity{clientId:"1", minerId:"345"}, fileName: "f", cost: 2}
+	op1 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "a", Cost: 2}
+	op2 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "b", Cost: 3}
+	op3 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "c", Cost: 2}
+	op4 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "d", Cost: 2}
+	op5 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"123"}, FileName: "e", Cost: 1}
+	op6 := CreateFile{OpId: OpIdentity{ClientId: "1", MinerId:"345"}, FileName: "f", Cost: 2}
 
-	opBlock1 := OpBlock{index: 1, prevHash: gHash, sig: Signature{id: "123", coins: 10}, operations: []interface{}{op1, op3}, nonce: 0}
-	opBlock1.nonce = CalcSecret(Cryptopuzzle{Hash: opBlock1.getStringWithoutNonce(), N: numZeros})
+	opBlock1 := OpBlock{Index: 1, PrevHash: gHash, Sig: Signature{Id: "123", Coins: 10}, Operations: []interface{}{op1, op3}, Nonce: 0}
+	opBlock1.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock1.getStringWithoutNonce(), N: numZeros})
 
-	opBlock2 := OpBlock{index: 2, prevHash: opBlock1.getHash(), sig: Signature{id: "345", coins: 10}, operations: []interface{}{op2, op4}, nonce: 0}
-	opBlock2.nonce = CalcSecret(Cryptopuzzle{Hash: opBlock2.getStringWithoutNonce(), N: numZeros})
+	opBlock2 := OpBlock{Index: 2, PrevHash: opBlock1.getHash(), Sig: Signature{Id: "345", Coins: 10}, Operations: []interface{}{op2, op4}, Nonce: 0}
+	opBlock2.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock2.getStringWithoutNonce(), N: numZeros})
 
-	opBlock3 := OpBlock{index: 3, prevHash: opBlock2.getHash(), sig: Signature{id: "456", coins: 10}, operations: []interface{}{op5, op6}, nonce: 0}
-	opBlock3.nonce = CalcSecret(Cryptopuzzle{Hash: opBlock3.getStringWithoutNonce(), N: numZeros})
+	opBlock3 := OpBlock{Index: 3, PrevHash: opBlock2.getHash(), Sig: Signature{Id: "456", Coins: 10}, Operations: []interface{}{op5, op6}, Nonce: 0}
+	opBlock3.Nonce = CalcSecret(Cryptopuzzle{Hash: opBlock3.getStringWithoutNonce(), N: numZeros})
 
-	bc := BlockChain{blockChainMap: map[string] interface{}{opBlock1.getHash(): opBlock1, opBlock2.getHash(): opBlock2}, heads:[]string{opBlock2.getHash()}, initialized: true, genesisHash: gHash}
+	bc := BlockChain{BlockChainMap: map[string] interface{}{opBlock1.getHash(): opBlock1, opBlock2.getHash(): opBlock2}, Heads:[]string{opBlock2.getHash()}, Initialized: true, GenesisHash: gHash}
 
 	chain := bc.getChainBeforeBlock(opBlock3)
 	expectedChain := []string{opBlock1.getHash(), opBlock2.getHash()}
