@@ -1,16 +1,22 @@
 package miner
 
 import (
-	"cpsc416-p1/rfslib"
 	"crypto/md5"
 	"encoding/hex"
 	"math"
 	"strings"
 	"sync"
 	"time"
+
+	"../rfslib"
 )
 
-var mutexBC = &sync.Mutex{}                 // the mutex for the block chain data structure
+const (
+	appendCost uint32 = 2
+	createCost uint32 = 1
+)
+
+var mutexBC = &sync.Mutex{} // the mutex for the block chain data structure
 
 type BlockChain struct {
 	// Miner needs to maintain this map and will have to create this map on its own when first joining the network
@@ -325,8 +331,7 @@ func(sig Signature) String() string {
 func GetMd5Hash(input string) string {
 	h := md5.New()
 	h.Write([]byte(input))
-	res := hex.EncodeToString(h.Sum(nil))
-	return res
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func CalcSecret(problem Cryptopuzzle) uint32 {
